@@ -1,0 +1,534 @@
+# C1 entries with no real caller (not code: data, mid-instruction or mid-routine fragments the analysis took for entries).
+# Method (2026-10-14): fixpoint from the decompiled/executed C1 routines, JSL/JSR from other banks and runtime discoveries,
+# following JSR/JMP and JSR/JMP (table,X) with each table cut at its CMP bound or where it runs into verified code
+# (7A6B: 219, 2D81: 15, B92D: 26, 0051: 10; 7C4D, 9CB1, 7C0B are data read as code). They stay generated; harmless if ever reached.
+C11CF0
+C17B02
+C17B04
+C17B80
+C17BA8
+C17BAA
+C17BAE
+C17BCC
+C17BCE
+C17BDA
+C10280
+C12F8D
+C17B11
+C10885
+C1239D
+C1640C
+C1A502
+C1A604
+C1A9AE
+C1AD0F
+C1ADE8
+C1AE16
+C1AEA8
+C1AEC6
+C1B3E7
+C1B3E9
+C17B0A
+C17B0C
+C1AD38
+C17B09
+C17B06
+C1AEA5
+C12122
+C1A500
+C1AAB1
+C126AD
+C107A9
+C1A537
+C10004
+C1000A
+C19D00
+C1AAAE
+C12C85
+C13FAD
+C1229E
+C122CD
+C1AD22
+C13EBD
+C1AF85
+C100A6
+C1011E
+C18A9C
+C18A9D
+C18A9E
+C18C08
+C195D5
+C1AE20
+C1FFA9
+C10085
+C101A5
+C12D7D
+C1AAB2
+C1799E
+C1AD1B
+C1D14C
+C101A2
+C10922
+C100A2
+C1A5A0
+C1A600
+C1A9AA
+C1ACEE
+C1AD9E
+C100A4
+C17B5F
+C19CAD
+C1AB48
+C1AD02
+C1B3B8
+C1E89C
+C17B00
+C1AD00
+C10C80
+C1900B
+C1D2AE
+C17BB1
+C1AEEC
+C1CC1A
+C12BAD
+C18F7B
+C1A538
+C1C7EE
+C1291A
+C12980
+C1900E
+C1BDAA
+C12207
+C19C60
+C1AECB
+C1AEF1
+C1AEF2
+C10EC5
+C14204
+C18E9D
+C199AD
+C1AE64
+C1AEEA
+C1E899
+C1009D
+C1AD2B
+C10EB1
+C10100
+C10A85
+C1BDA8
+C1C906
+C1E0E8
+C10EC6
+C1D040
+C1FFC9
+C1AEC5
+C1AE60
+C1C7AD
+C10099
+C1AA20
+C10110
+C10285
+C1CC8D
+C1FF49
+C1F080
+C1AD12
+C1F0AD
+C1AD2A
+C1028F
+C17785
+C19C9D
+C199A8
+C1B438
+C1E9AD
+C1EE80
+C19885
+C1AF0A
+C138AA
+C13A32
+C1AEC3
+C1CCBF
+C138A8
+C18F7A
+C1E58A
+C1105F
+C1E994
+C12CAD
+C1B1FD
+C1E894
+C11530
+C1C08D
+C12837
+C1D485
+C1EF20
+C1028D
+C1AEBB
+C1AEFF
+C1FDB1
+C13A20
+C1105E
+C14A60
+C1289C
+C1A4C6
+C1E8AE
+C1E8AF
+C1C91A
+C18BED
+C1C918
+C1D000
+C19875
+C1A521
+C114F0
+C1124C
+C19C8D
+C1B1F6
+C1E8AD
+C12CA6
+C14CFD
+C16918
+C17B27
+C1AD18
+C1AEE8
+C1B3C7
+C1CC00
+C1AD16
+C132BD
+C1E620
+C1F1D0
+C1C0C8
+C1EFA5
+C10BF0
+C1756A
+C1FDA8
+C1C914
+C1F0A4
+C13110
+C1B3C9
+C1AD11
+C16A20
+C108F0
+C1AD0E
+C11886
+C1AD0B
+C1D180
+C11520
+C1C910
+C1A518
+C1059D
+C1604A
+C16597
+C100A9
+C11885
+C11486
+C1889C
+C10769
+C1898E
+C1A510
+C1AD07
+C1AD04
+C173BD
+C1BD8E
+C18993
+C1A6CC
+C1058D
+C1EAEA
+C19C7B
+C1F096
+C106A9
+C1EAAD
+C19871
+C1A50E
+C1B3E8
+C1C0BD
+C1F098
+C19872
+C15A20
+C18A60
+C19C80
+C1986F
+C1A50C
+C106A6
+C10AE9
+C13F29
+C1EEAD
+C15ECA
+C107F0
+C1F820
+C106C5
+C1998E
+C160D1
+C19870
+C10BE0
+C1AD60
+C1B1D2
+C1E60C
+C1E608
+C106A5
+C10AF0
+C14A4A
+C160CA
+C17B99
+C1287B
+C10AEE
+C122AD
+C10AD0
+C1C18E
+C1E6CF
+C1C932
+C1E602
+C1E6CE
+C121C2
+C1998D
+C1E600
+C16984
+C1F099
+C1F020
+C18975
+C10930
+C11584
+C14A3D
+C16994
+C1E6CC
+C189B9
+C18A51
+C1D015
+C108A5
+C1EE60
+C10AA2
+C18BB9
+C1AB9D
+C1BF02
+C1B1BE
+C1639D
+C10A9D
+C14F20
+C1BD20
+C120EB
+C1AA98
+C1C8AD
+C1C0AD
+C17B16
+C1D006
+C1DE22
+C10BA2
+C10A20
+C101BD
+C101BF
+C10886
+C169DB
+C1BD0E
+C1BD0F
+C120E2
+C14B9D
+C1524C
+C12A20
+C129EF
+C14D4C
+C1899E
+C120DB
+C160AB
+C129EE
+C12AA9
+C1AA85
+C1294A
+C1BD07
+C1205F
+C12AAD
+C11ACB
+C12A85
+C17BCF
+C160A6
+C12885
+C1BD00
+C120CA
+C12060
+C11AC9
+C12A86
+C1C210
+C116AF
+C1205E
+C17B8B
+C1184A
+C12A80
+C1651D
+C15E36
+C1AE56
+C10A0A
+C10A0C
+C15E32
+C120AE
+C1568D
+C1C09D
+C1209D
+C120C9
+C160A0
+C16518
+C15099
+C17BCB
+C1293D
+C14904
+C120B2
+C120C2
+C1B189
+C1B18B
+C11630
+C1728D
+C15E2D
+C164A8
+C1C9B3
+C16098
+C1385E
+C1FA20
+C1B179
+C170A9
+C16095
+C1F46D
+C11A85
+C11820
+C11685
+C1B16E
+C1E6FD
+C1180A
+C1290C
+C1BEBD
+C11804
+C1B158
+C1EBB1
+C17BBC
+C16480
+C13028
+C13029
+C1AF27
+C1EBAD
+C1F7AD
+C1078D
+C16469
+C1DACA
+C1F5AD
+C149BF
+C1C95E
+C1C95F
+C10780
+C1F710
+C160FA
+C17BB7
+C1E000
+C1279C
+C12580
+C1E580
+C127A9
+C1F3BD
+C12680
+C1380A
+C1F3B0
+C1F3D0
+C1B0E8
+C1CAA6
+C1E48D
+C1CB20
+C1E14C
+C1F6AE
+C12620
+C13D4C
+C15520
+C1E38D
+C1E79D
+C1CCF9
+C137B9
+C10629
+C105D0
+C1E27B
+C10FAD
+C10FC9
+C10F80
+C11005
+C1100A
+C11015
+C14AAD
+C13AAD
+C10F10
+C1E300
+C13A98
+C13A99
+C14A9D
+C10EA5
+C10EF0
+C13A80
+C12430
+C1E538
+C123BD
+C123AD
+C125AD
+C105A9
+C16D18
+C11E85
+C1039D
+C103BD
+C10320
+C103A9
+C10400
+C103D0
+C103B0
+C103C9
+C10485
+C10310
+C102E6
+C102C5
+C102A9
+C1029D
+C102A2
+C102A6
+C1E200
+C16BFC
+C11A20  mid-instruction (inside LDA $5E30,X at C1:1A1E); no JSR/JMP/JSL or table reaches it (2026-10-15)
+C10C69  mid-routine instruction of C10C2D, no branch target from outside; only reached by over-long table reads at junk dispatch sites C732 (2026-10-20)
+C10C85  mid-instruction (inside JSR at C1:0C83, routine C10C2D); only reached by over-long table reads at junk dispatch sites C732 (2026-10-20)
+C10C8D  mid-instruction (inside STA at C1:0C8C, routine C10C2D); only reached by over-long table reads at junk dispatch sites 8608 (2026-10-20)
+C10CA5  mid-instruction (inside STA at C1:0CA3, routine C10C2D); only reached by over-long table reads at junk dispatch sites C732 (2026-10-20)
+C10CB9  mid-routine instruction of C10C2D, no branch target from outside; only reached by over-long table reads at junk dispatch sites 7C0B (2026-10-20)
+C10CBD  mid-routine instruction of C10C2D, no branch target from outside; only reached by over-long table reads at junk dispatch sites 4328/4CD4/7C0B (2026-10-20)
+C10CD9  mid-routine instruction of C10C2D, no branch target from outside; only reached by over-long table reads at junk dispatch sites 7C0B (2026-10-20)
+C10CE0  mid-instruction (inside STA at C1:0CDF, routine C10C2D); only reached by over-long table reads at junk dispatch sites EB45 (2026-10-20)
+C10CF0  mid-instruction (inside SBC at C1:0CED, routine C10C2D); only reached by over-long table reads at junk dispatch sites 8608 (2026-10-20)
+C10D80  mid-instruction (inside STA at C1:0D7E, routine C10C2D); only reached by over-long table reads at junk dispatch sites 30B2 (2026-10-20)
+C10E65  mid-instruction (inside JSR at C1:0E63, routine C10C2D); only reached by over-long table reads at junk dispatch sites BFB1 (2026-10-20)
+C10E80  mid-routine instruction of C10C2D, no branch target from outside; only reached by over-long table reads at junk dispatch sites 30B2 (2026-10-20)
+C10E85  mid-routine instruction of C10C2D, no branch target from outside; only reached by over-long table reads at junk dispatch sites BFB1/C732 (2026-10-20)
+C10E86  mid-instruction (inside STA at C1:0E85, routine C10C2D); only reached by over-long table reads at junk dispatch sites BFB1/C732 (2026-10-20)
+C10E91  mid-instruction (inside BPL at C1:0E90, routine C10C2D); only reached by over-long table reads at junk dispatch sites BFB1 (2026-10-20)
+C112F0  no real code around it; only reached by over-long table reads at junk dispatch sites 30B2/D704/D783... (2026-10-20)
+C118F3  mid-routine instruction of C117DD, no branch target from outside; only reached by over-long table reads at junk dispatch sites 0067 (2026-10-20)
+C1194C  mid-routine instruction of C117DD, no branch target from outside; only reached by over-long table reads at junk dispatch sites C732 (2026-10-20)
+C14203  mid-instruction (inside LDA at C1:4202, routine C141BE); only reached by over-long table reads at junk dispatch sites 0067 (2026-10-20)
+C15B4C  mid-instruction (inside STA at C1:5B4B, routine C15ADB); only reached by over-long table reads at junk dispatch sites C732 (2026-10-20)
+C15C60  mid-instruction (inside LDA at C1:5C5F, routine C15ADB); only reached by over-long table reads at junk dispatch sites 0067 (2026-10-20)
+C15CCC  mid-routine instruction of C15ADB, no branch target from outside; only reached by over-long table reads at junk dispatch sites 0067 (2026-10-20)
+C15CCF  mid-routine instruction of C15ADB, no branch target from outside; only reached by over-long table reads at junk dispatch sites 0067 (2026-10-20)
+C17F29  no real code around it; only reached by over-long table reads at junk dispatch sites 8608/BFB1 (2026-10-20)
+C18A9F  no real code around it; only reached by over-long table reads at junk dispatch sites 8333/874E/8CE7... (2026-10-20)
+C18D80  no real code around it; only reached by over-long table reads at junk dispatch sites 8608 (2026-10-20)
+C18DC0  no real code around it; only reached by over-long table reads at junk dispatch sites D704/D783/D893... (2026-10-20)
+C18DCC  no real code around it; only reached by over-long table reads at junk dispatch sites 0067/BFB1 (2026-10-20)
+C18E85  no real code around it; only reached by over-long table reads at junk dispatch sites 7C0B/99C3 (2026-10-20)
+C19BBD  no real code around it; only reached by over-long table reads at junk dispatch sites 8608/EB45 (2026-10-20)
+C19C04  no real code around it; only reached by over-long table reads at junk dispatch sites 8608 (2026-10-20)
+C19C11  no real code around it; only reached by over-long table reads at junk dispatch sites 29AE/30B2 (2026-10-20)
+C19C12  no real code around it; only reached by over-long table reads at junk dispatch sites 29AE/30B2 (2026-10-20)
+C19C13  no real code around it; only reached by over-long table reads at junk dispatch sites 30B2 (2026-10-20)
+C19C20  no real code around it; only reached by over-long table reads at junk dispatch sites 8608 (2026-10-20)
+C19C27  no real code around it; only reached by over-long table reads at junk dispatch sites 8608 (2026-10-20)
+C19C28  no real code around it; only reached by over-long table reads at junk dispatch sites 7C0B (2026-10-20)
+C1AA96  mid-instruction (inside STA at C1:AA95, routine C1AA61); only reached by over-long table reads at junk dispatch sites 8608 (2026-10-20)
+C1AD33  mid-instruction (inside SEP at C1:AD32, routine C1AD09); only reached by over-long table reads at junk dispatch sites 30B2 (2026-10-20)
+C1CE03  mid-instruction (inside STA at C1:CE01, routine C1CDFF); only reached by over-long table reads at junk dispatch sites 7C0B (2026-10-20)
+C1F000  no real code around it; only reached by over-long table reads at junk dispatch sites BFB1/D704/D783... (2026-10-20)
+C1F001  no real code around it; only reached by over-long table reads at junk dispatch sites 8333/874E/8CE7... (2026-10-20)
+C1F006  no real code around it; only reached by over-long table reads at junk dispatch sites 8608/C732 (2026-10-20)
+C1F009  no real code around it; only reached by over-long table reads at junk dispatch sites 8608/C732 (2026-10-20)
+C1F00F  no real code around it; only reached by over-long table reads at junk dispatch sites 8333/874E/8CE7... (2026-10-20)
+C1F010  no real code around it; only reached by over-long table reads at junk dispatch sites 8333/8D88/AC2E (2026-10-20)
+C1F040  mid-instruction (inside REP at C1:F03F, routine C1F036); only reached by over-long table reads at junk dispatch sites 8333/874E/8CE7... (2026-10-20)
+C1F0B1  mid-instruction (inside REP at C1:F0B0, routine C1F095); only reached by over-long table reads at junk dispatch sites 8333/874E/8CE7... (2026-10-20)
+C1FA94  mid-instruction (inside JSL at C1:FA93, routine C1FA8B); only reached by over-long table reads at junk dispatch sites 0067 (2026-10-20)
+C1FB3F  mid-instruction (inside JSL at C1:FB3D, routine C1FA8B); only reached by over-long table reads at junk dispatch sites 99C3 (2026-10-20)
+C1FC4C  mid-instruction (inside REP at C1:FC4B, routine C1FA8B); only reached by over-long table reads at junk dispatch sites 30B2 (2026-10-20)
+C1FCAD  mid-routine instruction of C1FA8B, no branch target from outside; only reached by over-long table reads at junk dispatch sites 8333/874E/8CE7... (2026-10-20)

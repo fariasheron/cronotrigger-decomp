@@ -1,0 +1,273 @@
+# CF entries with no real caller (not code). Method (2026-10-20): tools/decomp/fdreach/reach.py CF CFF01E:8 CFF02E:8
+# (fixpoint from decompiled/kept/profiled routines, real C1 routines and the sweep profile; the two JSR (abs,X) tables of
+# CFEFAF bounded at 8 each). CF0000-CFE2FF is data (the analysis seeded it from data read as JSR (abs,X) tables, e.g. at
+# CF00B6/CF00B9); the battle code is CFE300-CFFE84 and everything else there is a branch label or mid-instruction. They stay generated.
+CF013A  data (CF0000-CFE2FF holds tables, no code)
+CF014E  data (CF0000-CFE2FF holds tables, no code)
+CF071A  data (CF0000-CFE2FF holds tables, no code)
+CF0727  data (CF0000-CFE2FF holds tables, no code)
+CF093F  data (CF0000-CFE2FF holds tables, no code)
+CF0B23  data (CF0000-CFE2FF holds tables, no code)
+CF0FF6  data (CF0000-CFE2FF holds tables, no code)
+CF1130  data (CF0000-CFE2FF holds tables, no code)
+CF13B9  data (CF0000-CFE2FF holds tables, no code)
+CF13BA  data (CF0000-CFE2FF holds tables, no code)
+CF13BC  data (CF0000-CFE2FF holds tables, no code)
+CF13BF  data (CF0000-CFE2FF holds tables, no code)
+CF13C2  data (CF0000-CFE2FF holds tables, no code)
+CF13C5  data (CF0000-CFE2FF holds tables, no code)
+CF13C8  data (CF0000-CFE2FF holds tables, no code)
+CF13CB  data (CF0000-CFE2FF holds tables, no code)
+CF13CE  data (CF0000-CFE2FF holds tables, no code)
+CF13D1  data (CF0000-CFE2FF holds tables, no code)
+CF13D4  data (CF0000-CFE2FF holds tables, no code)
+CF13D7  data (CF0000-CFE2FF holds tables, no code)
+CF13DA  data (CF0000-CFE2FF holds tables, no code)
+CF13DD  data (CF0000-CFE2FF holds tables, no code)
+CF13E0  data (CF0000-CFE2FF holds tables, no code)
+CF13E3  data (CF0000-CFE2FF holds tables, no code)
+CF13E9  data (CF0000-CFE2FF holds tables, no code)
+CF13EC  data (CF0000-CFE2FF holds tables, no code)
+CF13EF  data (CF0000-CFE2FF holds tables, no code)
+CF13F2  data (CF0000-CFE2FF holds tables, no code)
+CF13F5  data (CF0000-CFE2FF holds tables, no code)
+CF13F8  data (CF0000-CFE2FF holds tables, no code)
+CF1A9D  data (CF0000-CFE2FF holds tables, no code)
+CF1B51  data (CF0000-CFE2FF holds tables, no code)
+CF1C37  data (CF0000-CFE2FF holds tables, no code)
+CF1CD0  data (CF0000-CFE2FF holds tables, no code)
+CF1CE0  data (CF0000-CFE2FF holds tables, no code)
+CF1CE1  data (CF0000-CFE2FF holds tables, no code)
+CF1CF0  data (CF0000-CFE2FF holds tables, no code)
+CF1D0C  data (CF0000-CFE2FF holds tables, no code)
+CF1DAA  data (CF0000-CFE2FF holds tables, no code)
+CF2064  data (CF0000-CFE2FF holds tables, no code)
+CF206A  data (CF0000-CFE2FF holds tables, no code)
+CF20D1  data (CF0000-CFE2FF holds tables, no code)
+CF20D2  data (CF0000-CFE2FF holds tables, no code)
+CF20D4  data (CF0000-CFE2FF holds tables, no code)
+CF20DA  data (CF0000-CFE2FF holds tables, no code)
+CF20DC  data (CF0000-CFE2FF holds tables, no code)
+CF20E0  data (CF0000-CFE2FF holds tables, no code)
+CF20E2  data (CF0000-CFE2FF holds tables, no code)
+CF20E5  data (CF0000-CFE2FF holds tables, no code)
+CF20EA  data (CF0000-CFE2FF holds tables, no code)
+CF2185  data (CF0000-CFE2FF holds tables, no code)
+CF2187  data (CF0000-CFE2FF holds tables, no code)
+CF2189  data (CF0000-CFE2FF holds tables, no code)
+CF218B  data (CF0000-CFE2FF holds tables, no code)
+CF22B9  data (CF0000-CFE2FF holds tables, no code)
+CF2391  data (CF0000-CFE2FF holds tables, no code)
+CF23BD  data (CF0000-CFE2FF holds tables, no code)
+CF2463  data (CF0000-CFE2FF holds tables, no code)
+CF2477  data (CF0000-CFE2FF holds tables, no code)
+CF24A1  data (CF0000-CFE2FF holds tables, no code)
+CF24A5  data (CF0000-CFE2FF holds tables, no code)
+CF29BF  data (CF0000-CFE2FF holds tables, no code)
+CF29C0  data (CF0000-CFE2FF holds tables, no code)
+CF29C3  data (CF0000-CFE2FF holds tables, no code)
+CF29C6  data (CF0000-CFE2FF holds tables, no code)
+CF29DA  data (CF0000-CFE2FF holds tables, no code)
+CF2A2C  data (CF0000-CFE2FF holds tables, no code)
+CF2A3C  data (CF0000-CFE2FF holds tables, no code)
+CF2ACC  data (CF0000-CFE2FF holds tables, no code)
+CF2DE2  data (CF0000-CFE2FF holds tables, no code)
+CF2DFD  data (CF0000-CFE2FF holds tables, no code)
+CF2E0A  data (CF0000-CFE2FF holds tables, no code)
+CF2E0D  data (CF0000-CFE2FF holds tables, no code)
+CF2E21  data (CF0000-CFE2FF holds tables, no code)
+CF2E3D  data (CF0000-CFE2FF holds tables, no code)
+CF2E41  data (CF0000-CFE2FF holds tables, no code)
+CF3029  data (CF0000-CFE2FF holds tables, no code)
+CF321A  data (CF0000-CFE2FF holds tables, no code)
+CF354C  data (CF0000-CFE2FF holds tables, no code)
+CF385F  data (CF0000-CFE2FF holds tables, no code)
+CF3863  data (CF0000-CFE2FF holds tables, no code)
+CF3865  data (CF0000-CFE2FF holds tables, no code)
+CF3873  data (CF0000-CFE2FF holds tables, no code)
+CF3875  data (CF0000-CFE2FF holds tables, no code)
+CF38AA  data (CF0000-CFE2FF holds tables, no code)
+CF38AC  data (CF0000-CFE2FF holds tables, no code)
+CF38B5  data (CF0000-CFE2FF holds tables, no code)
+CF3929  data (CF0000-CFE2FF holds tables, no code)
+CF3937  data (CF0000-CFE2FF holds tables, no code)
+CF3BE1  data (CF0000-CFE2FF holds tables, no code)
+CF4069  data (CF0000-CFE2FF holds tables, no code)
+CF4099  data (CF0000-CFE2FF holds tables, no code)
+CF409D  data (CF0000-CFE2FF holds tables, no code)
+CF40B9  data (CF0000-CFE2FF holds tables, no code)
+CF40BF  data (CF0000-CFE2FF holds tables, no code)
+CF40C0  data (CF0000-CFE2FF holds tables, no code)
+CF4120  data (CF0000-CFE2FF holds tables, no code)
+CF4129  data (CF0000-CFE2FF holds tables, no code)
+CF4D2E  data (CF0000-CFE2FF holds tables, no code)
+CF5928  data (CF0000-CFE2FF holds tables, no code)
+CF592E  data (CF0000-CFE2FF holds tables, no code)
+CF6220  data (CF0000-CFE2FF holds tables, no code)
+CF6320  data (CF0000-CFE2FF holds tables, no code)
+CF6321  data (CF0000-CFE2FF holds tables, no code)
+CF6328  data (CF0000-CFE2FF holds tables, no code)
+CF6360  data (CF0000-CFE2FF holds tables, no code)
+CF63BD  data (CF0000-CFE2FF holds tables, no code)
+CF6420  data (CF0000-CFE2FF holds tables, no code)
+CF642C  data (CF0000-CFE2FF holds tables, no code)
+CF64E9  data (CF0000-CFE2FF holds tables, no code)
+CF651D  data (CF0000-CFE2FF holds tables, no code)
+CF6529  data (CF0000-CFE2FF holds tables, no code)
+CF6615  data (CF0000-CFE2FF holds tables, no code)
+CF6918  data (CF0000-CFE2FF holds tables, no code)
+CF691A  data (CF0000-CFE2FF holds tables, no code)
+CF6928  data (CF0000-CFE2FF holds tables, no code)
+CF6929  data (CF0000-CFE2FF holds tables, no code)
+CF69AA  data (CF0000-CFE2FF holds tables, no code)
+CF6A0E  data (CF0000-CFE2FF holds tables, no code)
+CF6B21  data (CF0000-CFE2FF holds tables, no code)
+CF6BA0  data (CF0000-CFE2FF holds tables, no code)
+CF6BA1  data (CF0000-CFE2FF holds tables, no code)
+CF6BA2  data (CF0000-CFE2FF holds tables, no code)
+CF6BE1  data (CF0000-CFE2FF holds tables, no code)
+CF6C02  data (CF0000-CFE2FF holds tables, no code)
+CF6E99  data (CF0000-CFE2FF holds tables, no code)
+CF6EB9  data (CF0000-CFE2FF holds tables, no code)
+CF6F1A  data (CF0000-CFE2FF holds tables, no code)
+CF6F2E  data (CF0000-CFE2FF holds tables, no code)
+CF7520  data (CF0000-CFE2FF holds tables, no code)
+CF7526  data (CF0000-CFE2FF holds tables, no code)
+CF752E  data (CF0000-CFE2FF holds tables, no code)
+CF7ACD  data (CF0000-CFE2FF holds tables, no code)
+CF7B03  data (CF0000-CFE2FF holds tables, no code)
+CF7B04  data (CF0000-CFE2FF holds tables, no code)
+CF7B1A  data (CF0000-CFE2FF holds tables, no code)
+CF7B26  data (CF0000-CFE2FF holds tables, no code)
+CF7B29  data (CF0000-CFE2FF holds tables, no code)
+CF807B  data (CF0000-CFE2FF holds tables, no code)
+CF8660  data (CF0000-CFE2FF holds tables, no code)
+CF8EBD  data (CF0000-CFE2FF holds tables, no code)
+CF95E5  data (CF0000-CFE2FF holds tables, no code)
+CF95E6  data (CF0000-CFE2FF holds tables, no code)
+CF95FE  data (CF0000-CFE2FF holds tables, no code)
+CF9602  data (CF0000-CFE2FF holds tables, no code)
+CF9604  data (CF0000-CFE2FF holds tables, no code)
+CF9929  data (CF0000-CFE2FF holds tables, no code)
+CF997B  data (CF0000-CFE2FF holds tables, no code)
+CF99A0  data (CF0000-CFE2FF holds tables, no code)
+CF99A5  data (CF0000-CFE2FF holds tables, no code)
+CF99A8  data (CF0000-CFE2FF holds tables, no code)
+CF99A9  data (CF0000-CFE2FF holds tables, no code)
+CF99AA  data (CF0000-CFE2FF holds tables, no code)
+CF99AD  data (CF0000-CFE2FF holds tables, no code)
+CF99B5  data (CF0000-CFE2FF holds tables, no code)
+CFA0D8  data (CF0000-CFE2FF holds tables, no code)
+CFA16B  data (CF0000-CFE2FF holds tables, no code)
+CFA195  data (CF0000-CFE2FF holds tables, no code)
+CFA199  data (CF0000-CFE2FF holds tables, no code)
+CFA2E8  data (CF0000-CFE2FF holds tables, no code)
+CFA320  data (CF0000-CFE2FF holds tables, no code)
+CFA63F  data (CF0000-CFE2FF holds tables, no code)
+CFA643  data (CF0000-CFE2FF holds tables, no code)
+CFA81A  data (CF0000-CFE2FF holds tables, no code)
+CFA837  data (CF0000-CFE2FF holds tables, no code)
+CFA8AA  data (CF0000-CFE2FF holds tables, no code)
+CFA8EA  data (CF0000-CFE2FF holds tables, no code)
+CFA8FB  data (CF0000-CFE2FF holds tables, no code)
+CFA8FE  data (CF0000-CFE2FF holds tables, no code)
+CFAB00  data (CF0000-CFE2FF holds tables, no code)
+CFB099  data (CF0000-CFE2FF holds tables, no code)
+CFB09E  data (CF0000-CFE2FF holds tables, no code)
+CFB0A9  data (CF0000-CFE2FF holds tables, no code)
+CFB8B5  data (CF0000-CFE2FF holds tables, no code)
+CFC0BF  data (CF0000-CFE2FF holds tables, no code)
+CFC0F7  data (CF0000-CFE2FF holds tables, no code)
+CFC2A2  data (CF0000-CFE2FF holds tables, no code)
+CFC3BD  data (CF0000-CFE2FF holds tables, no code)
+CFC3E6  data (CF0000-CFE2FF holds tables, no code)
+CFC5A1  data (CF0000-CFE2FF holds tables, no code)
+CFC6F6  data (CF0000-CFE2FF holds tables, no code)
+CFC9A4  data (CF0000-CFE2FF holds tables, no code)
+CFC9AA  data (CF0000-CFE2FF holds tables, no code)
+CFCA00  data (CF0000-CFE2FF holds tables, no code)
+CFCCC6  data (CF0000-CFE2FF holds tables, no code)
+CFCD64  data (CF0000-CFE2FF holds tables, no code)
+CFD185  data (CF0000-CFE2FF holds tables, no code)
+CFD4AD  data (CF0000-CFE2FF holds tables, no code)
+CFD5B9  data (CF0000-CFE2FF holds tables, no code)
+CFDE9D  data (CF0000-CFE2FF holds tables, no code)
+CFDEA2  data (CF0000-CFE2FF holds tables, no code)
+CFE32E  mid-routine label inside CFE300
+CFE4E8  mid-instruction inside CFE300
+CFE52E  mid-routine label inside CFE300
+CFE538  mid-routine label inside CFE300
+CFE6FC  mid-instruction inside CFE58A
+CFE869  mid-routine label inside CFE83A
+CFE8E9  mid-instruction inside CFE83A
+CFE909  mid-routine label inside CFE83A
+CFE92E  mid-routine label inside CFE92C
+CFE938  mid-instruction inside CFE92C
+CFE939  mid-routine label inside CFE92C
+CFE994  mid-instruction inside CFE92C
+CFE9AA  mid-instruction inside CFE99C
+CFEA15  mid-instruction inside CFE99C
+CFEA7D  mid-routine label inside CFE99C
+CFEB29  mid-routine label inside CFEAC5
+CFEB2E  mid-routine label inside CFEAC5
+CFEB39  mid-instruction inside CFEAC5
+CFED39  mid-routine label inside CFED18
+CFED6E  mid-routine label inside CFED18
+CFEDBF  mid-instruction inside CFEDB8
+CFEE09  mid-routine label inside CFEDF7
+CFEE10  mid-routine label inside CFEDF7
+CFEE53  mid-instruction inside CFEDB8
+CFEF2E  mid-routine label inside CFEEEB
+CFF040  mid-routine label inside CFF03E
+CFF099  mid-routine label inside CFF087 (generated split; profiled only via that tail-call)
+CFF09D  mid-routine label inside CFF087
+CFF0A0  mid-routine label inside CFF087
+CFF0A1  mid-instruction inside CFF087
+CFF0A6  mid-routine label inside CFF087
+CFF0A9  mid-instruction inside CFF087
+CFF0AA  mid-routine label inside CFF087
+CFF0AC  mid-instruction inside CFF087
+CFF0CF  mid-instruction inside CFF087
+CFF0D0  mid-routine label inside CFF087
+CFF139  mid-routine label inside CFF087
+CFF1B9  mid-routine label inside CFF087
+CFF32E  mid-routine label inside CFF23D
+CFF339  mid-instruction inside CFF23D
+CFF3B0  mid-routine label inside CFF39F
+CFF3EE  mid-instruction inside CFF3BA
+CFF423  mid-instruction inside CFF405
+CFF4BD  mid-instruction inside CFF4B2
+CFF529  mid-routine label inside CFF503
+CFF530  mid-instruction inside CFF503
+CFF539  mid-routine label inside CFF503
+CFF548  mid-instruction inside CFF503
+CFF54C  mid-routine label inside CFF503
+CFF56E  mid-routine label inside CFF503
+CFF5D0  mid-routine label inside CFF503
+CFF620  mid-instruction inside CFF503
+CFF69D  mid-routine label inside CFF503
+CFF6BD  mid-instruction inside CFF503
+CFF700  mid-instruction inside CFF6E2
+CFF72E  mid-instruction inside CFF6E2
+CFF739  mid-routine label inside CFF6E2
+CFF7BD  mid-instruction inside CFF6E2
+CFF809  mid-routine label inside CFF7FC
+CFF829  mid-routine label inside CFF7FC
+CFF8B5  mid-routine label inside CFF884
+CFF8ED  mid-routine label inside CFF884
+CFF8F1  mid-instruction inside CFF884
+CFF900  mid-routine label inside CFF884
+CFF90D  mid-instruction inside CFF884
+CFF92E  mid-routine label inside CFF884
+CFF939  mid-instruction inside CFF884
+CFF9A9  mid-instruction inside CFEFAF
+CFFA29  mid-instruction inside CFF9FB
+CFFA69  mid-instruction inside CFFA43
+CFFA7D  mid-instruction inside CFFA43
+CFFA94  mid-instruction inside CFFA43
+CFFA9D  mid-instruction inside CFFA43
+CFFB20  mid-routine label inside CFFAE2
+CFFB2E  mid-routine label inside CFFAE2
+CFFD2E  mid-routine label inside CFFD02
+CFFE19  mid-instruction inside CFFDAD
+CFFE4E  mid-instruction inside CFFE20

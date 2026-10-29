@@ -1,0 +1,75 @@
+wait 1500
+press start 5
+wait 200
+press a 5
+wait 200
+press a 5
+wait 200
+press a 5
+wait 300
+press start 5
+wait 300
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u2
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u5
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u8
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u11
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u14
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u17
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u20
+wait 150
+press a 5
+wait 150
+press a 5
+wait 150
+press a 5
+dump u23
+press down 60
+wait 30
+dump v1
+press right 60
+wait 30
+dump v2
+quit

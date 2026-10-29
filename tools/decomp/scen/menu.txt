@@ -1,0 +1,182 @@
+wait 2
+loadstate 1
+wait 40
+wait 120
+press x 5
+wait 120
+press a 5
+wait 80
+press down 5
+wait 30
+press a 5
+wait 60
+press down 5
+wait 30
+press b 5
+wait 40
+press b 5
+wait 40
+press b 5
+wait 40
+dump m1
+press x 5
+wait 80
+press right 5
+wait 25
+press a 5
+wait 80
+press down 5
+wait 30
+press a 5
+wait 60
+press down 5
+wait 30
+press b 5
+wait 40
+press b 5
+wait 40
+press b 5
+wait 40
+dump m2
+press x 5
+wait 80
+press right 5
+wait 25
+press right 5
+wait 25
+press a 5
+wait 80
+press down 5
+wait 30
+press a 5
+wait 60
+press down 5
+wait 30
+press b 5
+wait 40
+press b 5
+wait 40
+press b 5
+wait 40
+dump m3
+press x 5
+wait 80
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press a 5
+wait 80
+press down 5
+wait 30
+press a 5
+wait 60
+press down 5
+wait 30
+press b 5
+wait 40
+press b 5
+wait 40
+press b 5
+wait 40
+dump m4
+press x 5
+wait 80
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press a 5
+wait 80
+press down 5
+wait 30
+press a 5
+wait 60
+press down 5
+wait 30
+press b 5
+wait 40
+press b 5
+wait 40
+press b 5
+wait 40
+dump m5
+press x 5
+wait 80
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press a 5
+wait 80
+press down 5
+wait 30
+press a 5
+wait 60
+press down 5
+wait 30
+press b 5
+wait 40
+press b 5
+wait 40
+press b 5
+wait 40
+dump m6
+press x 5
+wait 80
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press a 5
+wait 80
+press down 5
+wait 30
+press a 5
+wait 60
+press down 5
+wait 30
+press b 5
+wait 40
+press b 5
+wait 40
+press b 5
+wait 40
+dump m7
+press x 5
+wait 80
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+press right 5
+wait 25
+quit

@@ -1,0 +1,121 @@
+{
+ "schema": "snesrecomp tier2 coverage v1",
+ "rom_title": "chronotrigger",
+ "total_tier_hits": 0,
+ "distinct_sites": 163,
+ "overflowed_tuples": 0,
+ "journal_write_failures": 0,
+ "discoveries": [
+  {
+   "site_pc24": "0xC310BF",
+   "target_pc24": "0xC024A7",
+   "entry_mx": "M1X0",
+   "site_kind": "indirect_dispatch",
+   "clean_hits": 108,
+   "bail_hits": 0,
+   "first_frame": 824,
+   "last_frame": 971
+  },
+  {
+   "site_pc24": "0xCD0489",
+   "target_pc24": "0xCD0E61",
+   "entry_mx": "M1X0",
+   "site_kind": "call_gap",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 2051,
+   "last_frame": 2051
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC226A8",
+   "entry_mx": "M1X0",
+   "site_kind": "indirect_goto",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 845,
+   "last_frame": 845
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC227DE",
+   "entry_mx": "M1X0",
+   "site_kind": "indirect_goto",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 845,
+   "last_frame": 845
+  },
+  {
+   "site_pc24": "0xC20F7A",
+   "target_pc24": "0xC218F1",
+   "entry_mx": "M0X0",
+   "site_kind": "call_gap",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 680,
+   "last_frame": 680
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC27AFC",
+   "entry_mx": "M1X0",
+   "site_kind": "goto_gap",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 680,
+   "last_frame": 680
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC27B20",
+   "entry_mx": "M1X0",
+   "site_kind": "goto_gap",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 684,
+   "last_frame": 684
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC27C56",
+   "entry_mx": "M1X0",
+   "site_kind": "goto_gap",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 686,
+   "last_frame": 686
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC27C97",
+   "entry_mx": "M1X0",
+   "site_kind": "goto_gap",
+   "clean_hits": 1,
+   "bail_hits": 0,
+   "first_frame": 686,
+   "last_frame": 686
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC27CD8",
+   "entry_mx": "M1X0",
+   "site_kind": "goto_gap",
+   "clean_hits": 996,
+   "bail_hits": 0,
+   "first_frame": 686,
+   "last_frame": 1681
+  },
+  {
+   "site_pc24": "0xC21819",
+   "target_pc24": "0xC27D5E",
+   "entry_mx": "M1X0",
+   "site_kind": "goto_gap",
+   "clean_hits": 997,
+   "bail_hits": 0,
+   "first_frame": 686,
+   "last_frame": 1681
+  }
+ ],
+ "ram_routines_overflow": 0
+}

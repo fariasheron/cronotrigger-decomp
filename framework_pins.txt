@@ -1,0 +1,2 @@
+snesrecomp=2f9a164c6bb543692e4483d2f55e5ef372c7a796 (https://github.com/mstan/snesrecomp) + patches/snesrecomp-ct-decomp.patch
+recomp-ui=eed5f905c1105989bacb5ccd4ed1e974bbe8053e (https://github.com/RetroPortingToolKit/recomp-ui)

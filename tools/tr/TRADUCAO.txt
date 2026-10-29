@@ -1,0 +1,38 @@
+Chrono Trigger - suporte a traducao (PT-BR) no port
+
+O port le um arquivo ptbr.bin colocado ao lado do executavel. Sem esse
+arquivo o jogo roda em ingles, sem nenhuma mudanca. Este pacote NAO traz
+traducao: o arquivo e montado a partir de um texto que voce fornecer.
+
+1. Escreva traducao.json (UTF-8) com o que quiser trocar:
+   {
+     "falas": [ {"tabela": "FC:BA00", "indice": 31, "texto": "Ola! ..."} ],
+     "nomes": [ {"tipo": "item", "indice": 3, "texto": "Pocao"} ],
+     "menus": [ {"endereco": "FF:D03E", "tamanho": 12, "texto": "..."} ]
+   }
+   - "tabela" e "indice" dizem qual fala trocar. As 26 tabelas de falas e os
+     enderecos de nomes e menus estao no documento "Chrono Trigger: onde
+     traduzir no port".
+   - Nas falas valem todos os acentos: á à â ã é ê í ó ô õ ú ç e tambem
+     Á À Â Ã É Ê Í Ó Ô Õ Ú Ç. Na maiuscula o acento fica no espaco entre as
+     linhas; na primeira linha da caixa (onde a borda cobre esse espaco) a
+     letra sai um pouco mais baixa para o acento caber. Maiuscula acentuada
+     precisa do port 0.1.6 ou mais novo.
+   - Nomes e menus usam a fonte pequena: todos os acentos caem. Itens tem
+     ate 10 letras; tecnicas e inimigos, ate 11.
+   - {XX} insere o byte hexadecimal XX. Codigos de controle 01-20 (nome do
+     personagem, pausa, nova pagina, escolha) devem aparecer na mesma ordem
+     da fala original, senao a cena pode travar. Enter vira nova linha.
+2. Monte o arquivo (precisa de Python 3):
+     python3 build_pack.py <sua ROM .sfc> traducao.json ptbr.bin
+3. Coloque ptbr.bin ao lado do executavel e abra o jogo.
+   Para voltar ao ingles, apague ou renomeie o ptbr.bin.
+
+Saves feitos em ingles continuam funcionando com a traducao ligada.
+Um ptbr.bin montado com a ferramenta antiga continua funcionando no 0.1.6
+(sem maiusculas acentuadas); para te-las, monte de novo com esta versao.
+
+Patch de ROM (para emulador): com Python 3,
+     python3 build_rom.py <sua ROM .sfc> traducao.json saida.sfc
+gera uma ROM de 8 MB com o mesmo texto e os mesmos acentos. Use so com a
+sua propria ROM.

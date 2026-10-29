@@ -1,0 +1,56 @@
+Chrono Trigger - port nativo para PC (decompilacao do SNES em C)
+Uso pessoal. Nao distribua: o executavel contem codigo derivado da ROM.
+
+Como jogar:
+  1. Extraia a pasta inteira (o executavel precisa da pasta assets ao lado).
+  2. Windows: rode ChronoTrigger.exe.
+     Linux: rode ./ChronoTrigger (o SDL ja vem embutido).
+  3. No launcher, clique em "Browse For ROM" e escolha a ROM americana
+     "Chrono Trigger (USA)", sem cabecalho (CRC32 2d206bf7, 4 MB).
+     Se a sua ROM tiver 4.194.816 bytes, ela tem um cabecalho de copiadora
+     de 512 bytes: remova-o antes.
+  4. Clique em PLAY. Controles em "Configure" ou no keybinds.ini.
+     Saves (.srm) e save states ficam na pasta saves, ao lado do executavel.
+     Teclas: F1-F10 carregam e Shift+F1-F10 salvam save states, Tab acelera,
+     F12 volta no tempo, Alt+Enter tela cheia.
+
+Se o Windows SmartScreen reclamar, clique em "Mais informacoes" e
+"Executar assim mesmo" (o executavel nao e assinado).
+
+Shaders: no launcher, em Shader (com o renderizador OpenGL), ha
+"suavizar", "bilinear", "simple4x", "scalefx-aa" e "crt-mattias".
+"None" mostra os pixels originais.
+
+Como funciona: o codigo do jogo foi decompilado, ou seja, reescrito
+em C legivel (campo, eventos, menus, batalhas, cenas especiais: cerca de
+2.000 rotinas). Cada rotina foi comparada com o codigo original do SNES por
+testes automaticos e jogando, com um verificador que roda o original lado
+a lado e confere memoria, video e registradores. A ROM continua necessaria
+para os dados (graficos, textos, musicas, mapas). Alguns trechos pequenos
+(blocos de cena que reescrevem o proprio codigo e a conversa com o chip de
+som) ainda rodam num interpretador 65816 embutido.
+
+Traducao: o port aceita um arquivo ptbr.bin ao lado do executavel.
+Veja traducao/TRADUCAO.txt para montar um a partir do seu texto.
+
+Historico:
+0.1.0-0.1.4: recompilacao estatica (codigo traduzido automaticamente).
+0.1.5: corrige a leitura de 16 bits em $217F (a porta de WRAM $2180 nao
+avancava), que deixava erradas as formas de janela (triangulos/quadrilateros)
+de alguns efeitos de batalha.
+
+0.1.6: maiusculas acentuadas nas falas (Á À Â Ã É Ê Í Ó Ô Õ Ú Ç). Monte
+o ptbr.bin de novo com traducao/build_pack.py para usa-las; um ptbr.bin
+antigo continua funcionando.
+
+0.1.7: primeira versao decompilada. O jogo roda o codigo C decompilado e
+verificado em vez do codigo gerado pela recompilacao; 5 correcoes internas,
+sem mudanca visivel. A abertura e algumas animacoes podem ficar alguns
+quadros adiantadas ou atrasadas em relacao a 0.1.6. O executavel agora se
+chama ChronoTrigger. Saves, save states e ptbr.bin da 0.1.5 e da 0.1.6
+continuam valendo (copie a pasta saves e o ptbr.bin para a pasta nova).
+
+0.1.8: corrige o audio da 0.1.7 (musica sumindo e um apito agudo
+constante). As rotinas que mandam musicas e amostras para o chip de som
+voltam a rodar no ritmo exato do original: a versao em C mandava os dados
+rapido demais e o chip de som perdia bytes. O resto e igual a 0.1.7.

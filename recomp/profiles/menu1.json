@@ -1,0 +1,31 @@
+{
+ "schema": "snesrecomp tier2 coverage v1",
+ "rom_title": "chronotrigger",
+ "total_tier_hits": 6,
+ "distinct_sites": 2,
+ "overflowed_tuples": 0,
+ "journal_write_failures": 0,
+ "discoveries": [
+  {
+   "site_pc24": "0xC2C773",
+   "target_pc24": "0xC2F378",
+   "entry_mx": "M0X0",
+   "site_kind": "call_gap",
+   "clean_hits": 3,
+   "bail_hits": 0,
+   "first_frame": 280,
+   "last_frame": 1062
+  },
+  {
+   "site_pc24": "0xC2C77F",
+   "target_pc24": "0xC2CDE3",
+   "entry_mx": "M0X0",
+   "site_kind": "call_gap",
+   "clean_hits": 3,
+   "bail_hits": 0,
+   "first_frame": 280,
+   "last_frame": 1062
+  }
+ ],
+ "ram_routines_overflow": 0
+}

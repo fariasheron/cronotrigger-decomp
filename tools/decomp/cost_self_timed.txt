@@ -1,0 +1,13 @@
+# Decompiled entries that pace themselves: their C polls the hardware (V counter,
+# HVBJOY, APU ports) with dc_spend per pass, so the time they take already follows
+# the beam / the sound CPU. mkcost.py gives them no table cost (0): topping them up
+# to the original's mean after a short wait would put the CPU behind where the
+# original is. One line per entry: pc24 and why.
+C0CA76 waits for the V counter (213D) to pass the target line
+7E31B0 waits for the end and then the start of vblank (4212 bit 7)
+7E377E cycle-counted APU upload loop (spend() per instruction)
+C70000 APU program upload: handshakes on 2140 and a counted delay loop
+C70655 APU command handshake (apu_cmd: echo on 2140)
+C70922 APU command handshake (apu_cmd)
+C709DA APU command handshake (apu_cmd)
+C709EA APU resync handshake

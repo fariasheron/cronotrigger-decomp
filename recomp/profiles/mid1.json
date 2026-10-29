@@ -1,0 +1,10 @@
+{
+ "schema": "snesrecomp tier2 coverage v1",
+ "rom_title": "chronotrigger",
+ "total_tier_hits": 230,
+ "distinct_sites": 116,
+ "overflowed_tuples": 0,
+ "journal_write_failures": 0,
+ "discoveries": [],
+ "ram_routines_overflow": 0
+}

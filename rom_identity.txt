@@ -1,0 +1,26 @@
+# ROM identity for Chrono Trigger — the single source of truth.
+#
+# Read by three consumers, so a revision change is made once, here:
+#   - the build   (CMake generates snesrecomp_rom_identity.h from this file)
+#   - tools/regen.sh
+#   - .github/workflows/release.yml
+#
+# Format is `key = value`, one per line; `#` starts a comment. Values may be
+# quoted. Leaving a digest empty means the build cannot verify a ROM it is
+# handed — it will say so rather than accept it.
+
+display_name    = Chrono Trigger
+rom_file        = ct.sfc
+# Every digest of the bare image (copier header stripped), so the Retro
+# catalog can take a submission's identity from this file rather than ask
+# the submitter to hash the ROM again. The build verifies on crc32/sha256.
+expected_crc32  = 2d206bf7
+expected_md5    = a2bc447961e52fd2227baed164f729dc
+expected_sha1   = de5822f4f2f7a55acb8926d4c0eaa63d5d989312
+expected_sha256 = 06d1c2b06b716052c5596aaa0c2e5632a027fee1a9a28439e509f813c30829a9
+rom_size        = 4194304
+mapping         = hirom
+region          = USA
+# What a mod package's [[target]] game_id must name to apply to this title
+# (snesrecomp/docs/MOD_PACKAGES.md). Stable across revisions on purpose.
+game_id         = chronotrigger-usa

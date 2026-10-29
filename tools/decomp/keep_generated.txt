@@ -1,0 +1,84 @@
+# Entries left to the generated code on purpose (pc  reason)
+C0EC60  waits for NMI (spins on 0152); needs the generated code's cycle/yield handling
+C04181  waits for vblank then resets the stack and jumps to FD:C000 (never returns)
+C03FAF  event FF: n < 90 resets the stack and jumps to a scene (never returns); n >= 90 sub-commands are decompiled
+C03B4B  event E1: leaves through the field main loop
+C03B98  event DF: leaves through the field main loop
+C0F8F0  not code (data the analysis took for an entry)
+C0DB25  not code
+C06038  not code (mid-instruction)
+C00002  bank C0 jump table entry (BRL to 2C41)
+C0FF00  reset vector stub (SEI; XCE; JML FD:C000)
+C0EED0  mid-routine entry of C0:ED15's unrolled VRAM writes, reached only by the interpreter
+C0DBC5  mid-entry (LDA #FF; BRA) into the unrolled sprite builder; no direct caller, never reached in the sweeps
+C3C6DB  not code (data the analysis took for an entry)
+C30000  sets up the RAM interrupt vectors, unpacks code to 7E:3000 and JMLs into it (tail jump into RAM code)
+C30F83  only reached from inside C3:0EFA (decompiled with it); its last call pops its caller's return address
+C4B8E2  not code (data the analysis took for an entry)
+FFF0FE  not code (data the analysis took for an entry)
+FEBBFF  not code (data the analysis took for an entry)
+CEE7CC  JMP (00:004B): tail jump to an address chosen at run time
+CCED87  battle screen setup that ends waiting for the interrupt handler to count 98CA up to 4
+C2FFA2  PLP RTS tail: pulls a byte the caller pushed (stack fragment)
+C2C200  starts with PLP of the caller's byte (stack fragment)
+C2C208  PHP RTI: returns through a frame built by the caller
+C20346  waits for the interrupt handler to change $4B
+C2046E  JMP to C2:0346, waits for the interrupt handler to change $4B
+C20553  JMP ($0050): tail jump to an address chosen at run time
+C21819  JMP ($005B): tail jump to an address chosen at run time
+C21836  JML [$005B]: tail jump to an address chosen at run time
+C200FF  not code (data the analysis took for an entry)
+C2A0E8  ends with PLP of a byte its caller pushed (stack fragment)
+C285E3  not code (data the analysis took for an entry)
+C2250D  never returns (disables interrupts and loops forever)
+C28D09  not code (data the analysis took for an entry)
+C28514  JML C0:FF00 (soft reset) when 4218 reads L+R+Select+Start; no return
+C2C51B   misaligned entry (no caller reaches it; decodes as data)
+C270A9  ends in PLB of a byte its caller pushed (stack fragment)
+C29358  ends in PLP of the P its caller pushed, uses the caller's carry (stack fragment)
+C2209B  misaligned entry (decodes as data; no caller reaches it)
+C2005B  decodes as data (no caller reaches it)
+C2854B  starts with PLB of a byte its caller pushed (stack fragment)
+C2822B  menu task scheduler: yields by saving S and switching to the next task's stack (no C equivalent)
+C2821E  menu task scheduler: same yield as 822B with a wait count of 1 frame
+C21664  middle of 164B (no caller reaches it; a data word matches the address)
+C216A5  middle of an instruction in 164B decoded in the wrong width (no caller reaches it)
+C24CFB  middle of an instruction (STA $0027,X at 4CFA); no caller reaches it
+C23834  tail of an object state routine (JSR 3953 at 3834); no caller or table reaches it, never runs
+C2517C  middle of an object state routine (STA 000F,X after INC/LDA/ORA at 5174); no caller reaches it, never runs
+C20000  menu-mode main loop: frame waits through 046E, leaves only by JML C0:0000 or the 250D halt (never returns)
+C10000  JMP to a JML trampoline at C1:001B (tail jump into CF:FB65; the callee's RTL returns to our caller)
+C10006  JMP to a JML trampoline at C1:001F (tail jump into CF:FBE5)
+C10009  JMP to a JML trampoline at C1:0076 (tail jump into CF:E300)
+C1000C  JMP to a JML trampoline at C1:007A (tail jump into CF:E58A)
+C1000F  JMP to a JML trampoline at C1:0072 (tail jump into CC:E000)
+C17C4D  decodes as data (pointer table; no caller reaches it)
+C17B60  decodes as data (pointer table; no caller reaches it)
+C130BD  middle of STZ $A48E,X at 30BB (no caller reaches it)
+C1F4AE  decodes as data (COP after a JSR into 5ABD; no caller reaches it)
+C11A86  middle of an instruction (STA $0700 group at 1A84); no caller reaches it
+C11686  decodes as data (ROL $9F,X in the middle of 1683); no caller reaches it
+C12C59  middle of instructions at 2C58 (no caller reaches it)
+C1CA81 entry inside the operand of C1:CA80 BMI (garbage)
+C1E67B entry one byte before C1:E67C REP #$20 (misaligned)
+C14AEB reached only from C1851F (misaligned); mid-loop of C1:4A71
+C1851F inside the operand of C1:851E REP #$20 (misaligned)
+C10A9C inside the operand of C1:0A9B STA $87 (misaligned)
+C1BDB1 misaligned: starts 2 bytes before the real entry C1BDB3, inside earlier code; no callers
+C103A2 misaligned: operand byte of C1:03A1 STA $9499 (inside C1:0299); its callers (C12000.., JSR at C1:2039) are data
+C103F0 misaligned: operand byte inside C1:0299's digit code; callers at C1:858C/8644 are data
+C10484 misaligned: operand byte inside C1:0299; caller at C1:F009 is data
+CD044A waits for the NMI handler to clear dp 47 (spin loop on an interrupt flag)
+CD3B82 raster wait: polls $4212 H-blank and the $213D vertical counter (timing, not logic)
+CD1D93 operand then tail into CD3B82 (raster wait)
+CD0033 long entry with WAI (waits for the interrupt) then sets the NMI hook 020D..0F and loads battle music via CD:025E/027F (x = 1)
+FDEADA  waits for vblank (spins on 4210), then NMI on, screen on, CLI; needs the generated code's cycle/yield handling
+FDEAEB  waits for the NMI flag dp 1E; needs the generated code's yield handling
+FDC000  reset code: sets the stack to 06FF, clears the 42xx/21xx registers and JMLs to C0:000E; never returns
+FDDB97  screen load (forced blank, DMA/HDMA/NMI off, uploads) that ends in FD:EADA (vblank wait, screen on); kept with its wait
+FDFFE5  (JMP DB1D) per-frame loop over FD:DB97 and FD:EAEB (NMI wait, brightness from FD:DDF5); needs the generated yield handling
+FDFFE8  (JMP DABE) frame loop over FD:DB97 and FD:EAEB (NMI wait); needs the generated yield handling
+FDFFEB  (JMP DA5F) frame loop over FD:DB97 and FD:EAEB (NMI wait); needs the generated yield handling
+FDFFF1  (JMP DA00) frame loop over FD:DB97 and FD:EAEB (NMI wait); needs the generated yield handling
+C70A39  sound command handshake (APU ports, timeout retry); when the sound CPU refuses it drops its caller frame (PLA x3) and JMPs to C7:0192, the exit of C7:0004: a non-local exit the decomp glue cannot express
+CFFCFB waits for the NMI handler to clear dp 9E (spin loop on an interrupt flag)

@@ -1,0 +1,1673 @@
+diff --git a/recompiler-rs/src/bin/analyze.rs b/recompiler-rs/src/bin/analyze.rs
+index 03d0db3..2bff261 100644
+--- a/recompiler-rs/src/bin/analyze.rs
++++ b/recompiler-rs/src/bin/analyze.rs
+@@ -398,24 +398,18 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
+         for rr in &cfg.ram_routines {
+             let ram_bank = (rr.pc24 >> 16) & 0xFF;
+             let ram_addr = rr.pc24 & 0xFFFF;
+-            let aligned = (rom.len() + 0x7FFF) & !0x7FFFusize;
+-            rom.resize(aligned, 0);
+-            let synth_bank = (aligned / 0x8000) as u32;
+-            if synth_bank >= 0x80 {
+-                return Err(format!(
+-                    "ram_routine {:06X}: synthetic ROM bank ${synth_bank:02X} exceeds LoROM range",
+-                    rr.pc24
+-                ));
+-            }
++            // Placed by file offset: a 4 MB HiROM image leaves no LoROM bank
++            // to address an appended blob by, and $8000 alignment per blob
++            // would cost 32 KB each.
++            let base = rom.len() as u32;
+             rom.extend_from_slice(&rr.bytes);
+             // Guard pad (outside the reloc region) so a decoder tail over-read
+             // near the terminator can't index past the ROM vec.
+             rom.extend_from_slice(&[0u8; 8]);
+-            reloc_regions.push(RelocRegion::new(
++            reloc_regions.push(RelocRegion::new_abs(
+                 ram_bank,
+                 ram_addr,
+-                synth_bank,
+-                0x8000,
++                base,
+                 rr.bytes.len() as u32,
+             ));
+             roots.insert(VariantKey::new(rr.pc24, rr.entry_m, rr.entry_x));
+@@ -1045,6 +1039,11 @@ fn analyze(
+     let mut active_sets: HashMap<(u32, u8, u8), Vec<(u8, u8)>> = inputs.declared_exit_sets.clone();
+     let mut unstable_exact = HashSet::new();
+     let mut unstable_sets = HashSet::new();
++    // A fact that changes while its callees' facts are still being refined is
++    // a refinement, not an oscillation. Poison it only after it keeps changing.
++    const MAX_FACT_CHANGES: u32 = 4;
++    let mut exact_changes: HashMap<(u32, u8, u8), u32> = HashMap::new();
++    let mut set_changes: HashMap<(u32, u8, u8), u32> = HashMap::new();
+     let mut poisoned = HashSet::new();
+     let mut helpers: HashMap<u32, String> = HashMap::new();
+     let mut inline_args = inputs.inline_skip.clone();
+@@ -1059,7 +1058,12 @@ fn analyze(
+             NodeSummary,
+         ),
+     > = HashMap::new();
++    let t0 = std::time::Instant::now();
++    let progress = std::env::var_os("SNESRECOMP_ANALYZE_PROGRESS").is_some();
+     for _round in 1..=128 {
++        if progress {
++            eprintln!("[analyze] round {} t={:.1}s cache={} poisoned={} helpers={}", _round, t0.elapsed().as_secs_f64(), summary_cache.len(), poisoned.len(), helpers.len());
++        }
+         let mut pending = inputs.roots.clone();
+         let mut nodes = BTreeMap::new();
+         let mut round_exact = BTreeMap::new();
+@@ -1395,8 +1399,14 @@ fn analyze(
+                     active_sets.remove(&key);
+                 }
+                 Some(old) if old != pair => {
+-                    unstable_exact.insert(key);
+-                    next_exact.remove(&key);
++                    let n = exact_changes.entry(key).or_insert(0);
++                    *n += 1;
++                    if *n >= MAX_FACT_CHANGES {
++                        unstable_exact.insert(key);
++                        next_exact.remove(&key);
++                    } else {
++                        next_exact.insert(key, pair);
++                    }
+                 }
+                 _ => {}
+             }
+@@ -1420,8 +1430,14 @@ fn analyze(
+                     next_sets.insert(key, modes);
+                 }
+                 Some(old) if old != &modes => {
+-                    unstable_sets.insert(key);
+-                    next_sets.remove(&key);
++                    let n = set_changes.entry(key).or_insert(0);
++                    *n += 1;
++                    if *n >= MAX_FACT_CHANGES {
++                        unstable_sets.insert(key);
++                        next_sets.remove(&key);
++                    } else {
++                        next_sets.insert(key, modes);
++                    }
+                 }
+                 _ => {}
+             }
+diff --git a/recompiler-rs/src/decoder.rs b/recompiler-rs/src/decoder.rs
+index 8627000..eb25a44 100644
+--- a/recompiler-rs/src/decoder.rs
++++ b/recompiler-rs/src/decoder.rs
+@@ -452,7 +452,7 @@ fn autorecover_indirect_xtable(
+             continue;
+         }
+         nulls_in_a_row = 0;
+-        if addr16 < 0x8000 {
++        if !is_rom_address(mapping, eb, addr16) {
+             break;
+         }
+         if addr_in_data_regions(data_regions, eb, addr16) {
+@@ -495,7 +495,7 @@ fn autorecover_local_stride_runway(
+         return None;
+     }
+     let read8 = |pc: u32| -> Option<u8> {
+-        if !(0x8000..=0xFFFF).contains(&pc) {
++        if !is_rom_address(mapping, bank, pc) {
+             return None;
+         }
+         let offset = try_rom_offset(mapping, bank, pc, reloc)?;
+@@ -504,7 +504,7 @@ fn autorecover_local_stride_runway(
+ 
+     let site_pc = site_pc & 0xFFFF;
+     let pattern_start = site_pc.checked_sub(17)?;
+-    if pattern_start < 0x8000 {
++    if !is_rom_address(mapping, bank, pattern_start) {
+         return None;
+     }
+     let expected = [
+@@ -850,6 +850,10 @@ fn resolve_indirect_dispatch_targets(
+         if entry_size == 3 {
+             let eb = rom[off + 2] as u32;
+             entries.push((eb << 16) | addr16);
++        } else if addr16 == 0 {
++            // Raw $0000 short entry: a null slot, not bank:$0000 (mirrors the
++            // Python table walk).
++            entries.push(0);
+         } else {
+             entries.push((bank << 16) | addr16);
+         }
+@@ -2226,6 +2230,63 @@ fn entry_stack_restore_tcs_keys(graph: &FunctionDecodeGraph) -> HashSet<DecodeKe
+     restores
+ }
+ 
++/// TCS instructions that close a straight-line `TSC; CLC; ADC #imm; TCS` or
++/// `TSC; SEC; SBC #imm; TCS` run (16-bit A), mapped to the stack delta they
++/// apply. C compilers (Koei's among them) pop call arguments this way, so the
++/// height after the TCS is still known.
++fn arithmetic_tcs_deltas(graph: &FunctionDecodeGraph) -> HashMap<DecodeKey, i32> {
++    let mut predecessors: HashMap<DecodeKey, HashSet<DecodeKey>> = HashMap::new();
++    for di in graph.insns() {
++        for successor in &di.successors {
++            if graph.contains(successor) {
++                predecessors
++                    .entry(successor.clone())
++                    .or_default()
++                    .insert(di.key.clone());
++            }
++        }
++    }
++    let single_pred = |key: &DecodeKey| -> Option<&DecodedInsn> {
++        let preds = predecessors.get(key)?;
++        if preds.len() != 1 {
++            return None;
++        }
++        let pred = graph.get(preds.iter().next().unwrap())?;
++        if pred.successors.len() != 1 {
++            return None;
++        }
++        Some(pred)
++    };
++    let mut out = HashMap::new();
++    for di in graph.insns() {
++        if di.insn.mnem != "TCS" {
++            continue;
++        }
++        let Some(arith) = single_pred(&di.key) else { continue };
++        let a = &arith.insn;
++        if a.mode != Mode::Imm || (a.m_flag & 1) != 0 {
++            continue;
++        }
++        let want_carry = match a.mnem {
++            "ADC" => "CLC",
++            "SBC" => "SEC",
++            _ => continue,
++        };
++        let Some(carry) = single_pred(&arith.key) else { continue };
++        if carry.insn.mnem != want_carry {
++            continue;
++        }
++        let Some(tsc) = single_pred(&carry.key) else { continue };
++        if tsc.insn.mnem != "TSC" {
++            continue;
++        }
++        let imm = (a.operand & 0xFFFF) as i32;
++        let imm = if imm >= 0x8000 { imm - 0x10000 } else { imm };
++        out.insert(di.key.clone(), if a.mnem == "ADC" { -imm } else { imm });
++    }
++    out
++}
++
+ /// Local guest-stack deltas reaching each architectural return instruction.
+ /// `None` is an indeterminate height after TCS/TXS.
+ fn return_stack_delta_states(graph: &FunctionDecodeGraph) -> HashMap<u32, HashSet<Option<i32>>> {
+@@ -2251,6 +2312,7 @@ fn return_stack_delta_states(graph: &FunctionDecodeGraph) -> HashMap<u32, HashSe
+     }
+ 
+     let restoring_tcs = entry_stack_restore_tcs_keys(graph);
++    let arithmetic_tcs = arithmetic_tcs_deltas(graph);
+     let Some(entry) = graph.entry.as_ref() else {
+         return HashMap::new();
+     };
+@@ -2258,6 +2320,7 @@ fn return_stack_delta_states(graph: &FunctionDecodeGraph) -> HashMap<u32, HashSe
+         HashMap::from([(entry.clone(), HashSet::from([Some(0)]))]);
+     let mut worklist = vec![entry.clone()];
+     let mut returns: HashMap<u32, HashSet<Option<i32>>> = HashMap::new();
++    let mut widened: HashSet<DecodeKey> = HashSet::new();
+     while let Some(key) = worklist.pop() {
+         let Some(di) = graph.get(&key) else {
+             continue;
+@@ -2278,10 +2341,18 @@ fn return_stack_delta_states(graph: &FunctionDecodeGraph) -> HashMap<u32, HashSe
+         if restoring_tcs.contains(&key) {
+             next_states.insert(Some(0));
+         } else {
+-            let delta = local_delta(ins);
++            let delta = match arithmetic_tcs.get(&key) {
++                Some(&change) => Some(change),
++                None => local_delta(ins),
++            };
+             for state in states {
+                 next_states.insert(match (state, delta) {
+-                    (Some(value), Some(change)) => Some((value + change).clamp(-64, 64)),
++                    (Some(value), Some(change)) => {
++                        // Bound the lattice: a height this far out is a
++                        // push loop or a frame we cannot follow.
++                        let v = value + change;
++                        if (-1024..=1024).contains(&v) { Some(v) } else { None }
++                    }
+                     _ => None,
+                 });
+             }
+@@ -2290,11 +2361,23 @@ fn return_stack_delta_states(graph: &FunctionDecodeGraph) -> HashMap<u32, HashSe
+             if !graph.contains(successor) {
+                 continue;
+             }
+-            let old = in_states.get(successor).cloned().unwrap_or_default();
+-            let mut merged = old.clone();
+-            merged.extend(next_states.iter().copied());
+-            if merged != old {
+-                in_states.insert(successor.clone(), merged);
++            let slot = in_states.entry(successor.clone()).or_default();
++            let before = slot.clone();
++            if widened.contains(successor) {
++                slot.insert(None);
++            } else {
++                slot.extend(next_states.iter().copied());
++                // Widen: a height that keeps taking new values is a push/pull
++                // loop whose depth we cannot follow. Walking the bounded
++                // lattice one value at a time is quadratic (minutes per
++                // function in Chrono Trigger), so give up on the height.
++                if slot.len() > 16 {
++                    widened.insert(successor.clone());
++                    slot.clear();
++                    slot.insert(None);
++                }
++            }
++            if *slot != before {
+                 worklist.push(successor.clone());
+             }
+         }
+diff --git a/recompiler-rs/src/rom.rs b/recompiler-rs/src/rom.rs
+index 5ec9f54..157a4ff 100644
+--- a/recompiler-rs/src/rom.rs
++++ b/recompiler-rs/src/rom.rs
+@@ -132,6 +132,10 @@ pub struct RelocRegion {
+     pub rom_bank: u8,
+     pub rom_off: u16,
+     pub length: u32,
++    /// Absolute file offset of the source bytes when the region was placed
++    /// by offset rather than by (bank, addr) — synthetic `ram_routine` blobs
++    /// appended past a HiROM image have no bank address of their own.
++    pub rom_abs: Option<u32>,
+ }
+ 
+ impl RelocRegion {
+@@ -142,6 +146,14 @@ impl RelocRegion {
+             rom_bank: (rom_bank & 0xFF) as u8,
+             rom_off: (rom_off & 0xFFFF) as u16,
+             length,
++            rom_abs: None,
++        }
++    }
++
++    pub fn new_abs(ram_bank: u32, ram_addr: u32, rom_abs: u32, length: u32) -> Self {
++        RelocRegion {
++            rom_abs: Some(rom_abs),
++            ..RelocRegion::new(ram_bank, ram_addr, 0, 0, length)
+         }
+     }
+ }
+@@ -177,6 +189,9 @@ pub fn addr_to_rom_offset(
+ ) -> usize {
+     if let Some(r) = addr_in_reloc_region(bank, addr, regions) {
+         let delta = (addr & 0xFFFF) - (r.ram_addr as u32);
++        if let Some(abs) = r.rom_abs {
++            return abs as usize + delta as usize;
++        }
+         return rom_offset(mapping, r.rom_bank as u32, r.rom_off as u32) + delta as usize;
+     }
+     rom_offset(mapping, bank, addr)
+diff --git a/recompiler/v2/codegen.py b/recompiler/v2/codegen.py
+index 8c53517..4114451 100644
+--- a/recompiler/v2/codegen.py
++++ b/recompiler/v2/codegen.py
+@@ -188,11 +188,14 @@ def _is_invalid_lorom_call_target(addr_24: int) -> bool:
+     unit-test contexts that don't load a ROM.
+     """
+     pc = addr_24 & 0xFFFF
+-    if pc < 0x8000:
++    bank = (addr_24 >> 16) & 0xFF
++    if not _snes_is_rom_address(bank, pc):
+         return True
+     if _ROM_SIZE > 0:
+-        canon_bank = (addr_24 >> 16) & 0x7F
+-        offset = canon_bank * 0x8000 + (pc - 0x8000)
++        try:
++            offset = _snes_rom_offset(bank, pc)
++        except AssertionError:
++            return True
+         if offset >= _ROM_SIZE:
+             return True
+     return False
+@@ -487,6 +490,8 @@ from v2.ir import (  # noqa: E402
+     Reg, SegRef, SegKind, Value,
+ )
+ from snes65816 import INDIR, INDIR_X  # noqa: E402
++from snes65816 import is_rom_address as _snes_is_rom_address  # noqa: E402
++from snes65816 import rom_offset as _snes_rom_offset  # noqa: E402
+ 
+ 
+ # ── Helpers ─────────────────────────────────────────────────────────────────
+@@ -583,8 +588,14 @@ def _segref_addr_expr(seg: SegRef) -> tuple:
+         return ("0x00", f"(uint16)(cpu->S + {seg.offset:#06x})")
+     if k == SegKind.DP_INDIRECT:
+         # ((D + dp) word) (+ Y if indirect-Y), DB-bank.
++        # The indexed form carries (word + Y) into the bank like abs,Y:
++        # CT C2:EE64 `STA ($06),Y` with word+Y > $FFFF lands in $7F.
+         ptr_addr = f"(uint16)(cpu->D + {seg.offset:#06x})"
+-        return ("cpu->DB", f"(uint16)(cpu_read16(cpu, 0x00, {ptr_addr}){idx})")
++        if seg.index is None:
++            return ("cpu->DB", f"(uint16)(cpu_read16(cpu, 0x00, {ptr_addr}))")
++        eff24 = (f"(((uint32)cpu->DB << 16) + (uint32)cpu_read16(cpu, 0x00, {ptr_addr})"
++                 f"{idx.replace(' + cpu->', ' + (uint32)cpu->')})")
++        return (f"(uint8)(({eff24}) >> 16)", f"(uint16)({eff24})")
+     if k == SegKind.DP_INDIRECT_LONG:
+         # ((D + dp) long) (+ Y).  The indexed form adds Y to the full
+         # 24-bit pointer, including carry into the bank.  Keeping the pointer's
+@@ -615,8 +626,9 @@ def _segref_addr_expr(seg: SegRef) -> tuple:
+         return ("cpu->DB", f"cpu_read16(cpu, 0x00, {ptr_addr})")
+     if k == SegKind.STACK_REL_INDIRECT_Y:
+         ptr_addr = f"(uint16)(cpu->S + {seg.offset:#06x})"
+-        return ("cpu->DB",
+-                f"(uint16)(cpu_read16(cpu, 0x00, {ptr_addr}) + cpu->Y)")
++        eff24 = (f"(((uint32)cpu->DB << 16) + (uint32)cpu_read16(cpu, 0x00, {ptr_addr})"
++                 f" + (uint32)cpu->Y)")
++        return (f"(uint8)(({eff24}) >> 16)", f"(uint16)({eff24})")
+     raise ValueError(f"unsupported SegKind {k}")
+ 
+ 
+@@ -1788,10 +1800,20 @@ def _emit_indirect_dispatch(insn) -> List[str]:
+         out = [f"{indent}(void)cpu_trace_dispatch_oob(cpu, 0x{site_pc24:06x}, _idx);"]
+         if is_jsr or is_call:
+             if live_target:
++                # The interpreter tier is NOT always NORMAL: a frame-deadline
++                # yield inside the handler returns the LLE-unwind sentinel and
++                # an NLR returns SKIP_N. Both must propagate like any other
++                # call site, or the dispatcher resumes natively after a handler
++                # that never finished (UW:NH syscall table, null slots $3C-$41).
+                 out.append(
+-                    f"{indent}(void)interp_tier_run_call_frame(cpu, {live_target}, "
+-                    f"0x{site_pc24:06x}u, {call_frame_size}, NULL);"
++                    f"{indent}{{ RecompReturn _oob_r = interp_tier_run_call_frame(cpu, "
++                    f"{live_target}, 0x{site_pc24:06x}u, {call_frame_size}, NULL);"
+                     f"  /* {reason}: run the live pointer on the interpreter tier */")
++                out.append(f"{indent}  if (_oob_r != RECOMP_RETURN_NORMAL) {{")
++                out.append(f"{indent}    cpu_trace_event(cpu, 0, CPU_TR_NLR_PROPAGATE, (uint8)_oob_r, 0);")
++                out.append(f"{indent}    cpu_trace_mark_nlr_exit(BD_EXIT_KIND_SKIP_PROPAGATION);")
++                out.append(f"{indent}    return (RecompReturn)((int)_oob_r - 1);")
++                out.append(f"{indent}  }} }}")
+             else:
+                 out.append(
+                     f"{indent}cpu->S = (uint16)(cpu->S + {miss_cleanup_size});"
+@@ -1811,7 +1833,7 @@ def _emit_indirect_dispatch(insn) -> List[str]:
+     lines.append(f"  static const uint16 _disp_n = {n};")
+     lines.append("  if (_idx >= _disp_n) {")
+     # CALL-form: run the live pointer, then fall through to the post-dispatch
+-    # block (interp_tier_run_call_frame is always balanced and always NORMAL).
++    # block (a non-NORMAL return from the interpreter tier propagates).
+     # With no recoverable pointer it degrades to the historical behavior —
+     # unpop the unconsumed call frame, as if the handler returned immediately.
+     # Terminal form: tail-transfer to the live pointer, else abandon balanced.
+@@ -2652,7 +2674,7 @@ def _emit_blockmove(op: BlockMove) -> List[str]:
+         "    if (cpu->x_flag) { cpu->X &= 0x00FFu; cpu->Y &= 0x00FFu; }",
+         "    cpu->A = (uint16)(cpu->A - 1);",
+         "    if (cpu->A != 0xFFFF) {",
+-        "      if (interp_bridge_lle_master_deadline_reached(cpu)) {",
++        f"      if (interp_bridge_lle_master_deadline_reached_at(cpu, {trace_pc})) {{",
+         f"        return interp_bridge_lle_yield_unwind(cpu, {trace_pc});",
+         "      }",
+         "      cpu->cycles += 7;",
+diff --git a/recompiler/v2/decoder.py b/recompiler/v2/decoder.py
+index 9654b4a..93344d1 100644
+--- a/recompiler/v2/decoder.py
++++ b/recompiler/v2/decoder.py
+@@ -41,7 +41,7 @@ if str(_RECOMPILER_DIR) not in sys.path:
+     sys.path.insert(0, str(_RECOMPILER_DIR))
+ 
+ from snes65816 import (  # noqa: E402
+-    decode_insn, lorom_offset, Insn,
++    decode_insn, lorom_offset, is_rom_address, Insn,
+     ABS, INDIR, INDIR_X, LONG, IMM,
+ )
+ 
+@@ -272,7 +272,7 @@ def _autorecover_dp_table_count(rom: bytes, bank: int,
+             addr16 = rom[off] | (rom[off + 1] << 8)
+             if addr16 == 0:
+                 break
+-            if addr16 < 0x8000:
++            if not is_rom_address(bank, addr16):
+                 break
+             if _addr_in_data_regions(data_regions, bank, addr16):
+                 break
+@@ -309,7 +309,7 @@ def _autorecover_dp_table_count(rom: bytes, bank: int,
+             # Single null tolerated; two consecutive = stop.
+             # Simpler: stop on first null. Real handlers don't sit at $0000.
+             break
+-        if addr16 < 0x8000:
++        if not is_rom_address(eb, addr16):
+             break
+         if _addr_in_data_regions(data_regions, eb, addr16):
+             break
+@@ -477,11 +477,11 @@ def _autorecover_indirect_xtable(rom: bytes, bank: int, insn,
+             tbl_pc += entry_size
+             continue
+         nulls_in_a_row = 0
+-        if addr16 < 0x8000:
++        if not is_rom_address(eb, addr16):
+             break
+         if entry_size == 3 and (eb < 0x00 or eb > 0xFF):  # defensive
+             break
+-        if entry_size == 3 and addr16 < 0x8000:
++        if entry_size == 3 and not is_rom_address(eb, addr16):
+             break
+         if _addr_in_data_regions(data_regions, eb, addr16):
+             break
+@@ -989,6 +989,12 @@ def _resolve_indirect_dispatch_targets(rom: bytes, bank: int, insn,
+         if entry_size == 3:
+             eb = rom[off + 2]
+             entries.append((eb << 16) | addr16)
++        elif addr16 == 0:
++            # A raw $0000 short entry is a null dispatch slot, not bank:$0000
++            # (same rule as the explicit-targets path above). Keeping it as
++            # bank:$0000 made every caller depend on a nonexistent callee's
++            # exit and truncated the dispatch continuation.
++            entries.append(0)
+         else:
+             entries.append((bank << 16) | addr16)
+         tbl_pc += entry_size
+@@ -1399,7 +1405,7 @@ def _detect_inline_arg_bytes_stack_slot(rom: bytes, bank: int, addr: int,
+     budget = 0
+     while budget < 96:
+         budget += 1
+-        if not (0x8000 <= pc <= 0xFFFF):
++        if not is_rom_address(bank, pc):
+             return None
+         try:
+             off = lorom_offset(bank, pc)
+@@ -1766,7 +1772,7 @@ def detect_dp_return_inline_arg_bytes(rom: bytes, bank: int, addr: int):
+     budget = 0
+     while budget < 160:
+         budget += 1
+-        if not (0x8000 <= pc <= 0xFFFF):
++        if not is_rom_address(bank, pc):
+             return None
+         try:
+             off = lorom_offset(bank, pc)
+@@ -1861,7 +1867,7 @@ def classify_dispatch_helper(rom: bytes, bank: int, addr: int):
+     safety = 0
+     while safety < 256:
+         safety += 1
+-        if not (0x8000 <= pc <= 0xFFFF):
++        if not is_rom_address(bank, pc):
+             return None
+         try:
+             offset = lorom_offset(bank, pc)
+@@ -2280,7 +2286,7 @@ def _decode_function_uncached(rom: bytes, bank: int, start: int,
+             if boundary not in graph.boundary_exits:
+                 graph.boundary_exits.append(boundary)
+             continue
+-        if not (0x8000 <= pc <= 0xFFFF):
++        if not is_rom_address(bank, pc):
+             # Out-of-bank reference; surface upstream by skipping here.
+             continue
+         if _addr_in_data_regions(data_regions, bank, pc):
+@@ -2370,9 +2376,9 @@ def _decode_function_uncached(rom: bytes, bank: int, start: int,
+                     # ($00-$3F or $80-$FF) with addr16 >= 0x8000. The
+                     # `_dispatch_target_is_padding` gate below catches
+                     # genuine table-end junk.
+-                    if addr16 < 0x8000:
++                    if not is_rom_address(eb, addr16):
+                         break
+-                    is_valid_lorom_bank = (eb < 0x40) or (eb >= 0x80)
++                    is_valid_lorom_bank = is_rom_address(eb, addr16)
+                     if not is_valid_lorom_bank:
+                         break
+                     # Validity gate: stop the table if the entry points
+@@ -2398,7 +2404,7 @@ def _decode_function_uncached(rom: bytes, bank: int, start: int,
+                         entries.append(0)
+                         tbl_pc += entry_size
+                         continue
+-                    if addr16 < 0x8000:
++                    if not is_rom_address(bank, addr16):
+                         break
+                     if _dispatch_target_is_padding(rom, bank, addr16):
+                         break
+diff --git a/recompiler/v2/emit_function.py b/recompiler/v2/emit_function.py
+index 5cbd183..5908f2c 100644
+--- a/recompiler/v2/emit_function.py
++++ b/recompiler/v2/emit_function.py
+@@ -2022,6 +2022,10 @@ def emit_function(rom: bytes, bank: int, start: int,
+     # Compose the function source with labels per block.
+     src: List[str] = []
+     src.append(f"RecompReturn {func_name}(CpuState *cpu) {{")
++    # Game decomp hook: a hand-written dc_<pc24> linked into the game takes
++    # over this routine (all M/X variants); unresolved weak = generated body.
++    _dc = f"dc_{(bank << 16) | (start & 0xFFFF):06X}"
++    src.append(f"  {{ extern RecompReturn {_dc}(CpuState *) __attribute__((weak)); if ({_dc}) return {_dc}(cpu); }}")
+     # Diagnostics — same call-stack plumbing v1 emitted, so the runtime
+     # debug_server's `call_stack` cmd and crash-handler attribution work.
+     src.append(f'  extern const char *g_last_recomp_func;')
+@@ -2035,7 +2039,7 @@ def emit_function(rom: bytes, bank: int, start: int,
+     # calls to cross an event-driven host's frame deadline. Yield before
+     # entering the next architectural callee so the owning interpreter can
+     # deliver NMI/IRQ without discarding the already-pushed guest return frame.
+-    src.append('  if (interp_bridge_lle_master_deadline_reached(cpu)) {')
++    src.append(f'  if (interp_bridge_lle_master_deadline_reached_at(cpu, 0x{fn_entry_pc:06X}u)) {{')
+     src.append('    RecompStackPopYield();')
+     src.append(
+         f'    return interp_bridge_lle_yield_unwind(cpu, 0x{fn_entry_pc:06X}u);'
+@@ -2131,7 +2135,7 @@ def emit_function(rom: bytes, bank: int, start: int,
+         # instruction boundary, so it is safe to unwind here and resume this
+         # exact PC through the owning interpreter after host events run.
+         src.append(
+-            f'    if (interp_bridge_lle_master_deadline_reached(cpu)) {{')
++            f'    if (interp_bridge_lle_master_deadline_reached_at(cpu, 0x{block_pc24:06X}u)) {{')
+         src.append('      RecompStackPopYield();')
+         src.append(
+             f'      return interp_bridge_lle_yield_unwind('
+diff --git a/runner/src/common_cpu_infra.c b/runner/src/common_cpu_infra.c
+index 1f8be49..f646712 100644
+--- a/runner/src/common_cpu_infra.c
++++ b/runner/src/common_cpu_infra.c
+@@ -347,6 +347,12 @@ void recomp_dump_frame_array(FILE *out, uint16_t mark) {
+   fflush(out);
+ }
+ 
++/* Lowest recomp-stack slot an ancestor scan may match. A host that runs an
++ * interrupt handler while a guest call chain is parked beneath it (a fiber
++ * frame model) raises it to the parked chain's top, so the handler's
++ * rewritten returns cannot resolve into frames that are not its own. */
++int g_recomp_ancestor_floor;
++
+ int cpu_resolve_ancestor_skip(uint16_t ret_s) {
+   /* The current (top-1) frame is the one whose RTS we are resolving; it
+    * is NOT a match (its entry_s != ret_s, else the balanced host-return
+@@ -359,7 +365,7 @@ int cpu_resolve_ancestor_skip(uint16_t ret_s) {
+   int top = g_recomp_stack_top;
+   if (top < 2 || top > RECOMP_STACK_DEPTH) return -1;
+   int result = -1;
+-  for (int i = top - 2; i >= 0; i--) {
++  for (int i = top - 2; i >= g_recomp_ancestor_floor; i--) {
+     if (g_cpu_entry_s_valid[i] && g_cpu_entry_s[i] == ret_s) {
+       result = cpu_resolve_unwind_depth(i, top);
+       break;
+@@ -420,7 +426,7 @@ int cpu_resolve_post_return_skip(uint16_t post_s) {
+    * interpreter already consumed. */
+   int top = g_recomp_stack_top;
+   if (top < 2 || top > RECOMP_STACK_DEPTH) return -1;
+-  for (int i = top - 2; i >= 0; i--) {
++  for (int i = top - 2; i >= g_recomp_ancestor_floor; i--) {
+     uint16_t expected = (uint16_t)(g_cpu_entry_s[i] +
+                                    g_cpu_entry_return_frame[i]);
+     /* Same host-frame-vs-guest-frame conversion as the ancestor resolver:
+diff --git a/runner/src/common_rtl.c b/runner/src/common_rtl.c
+index a001e91..84eff49 100644
+--- a/runner/src/common_rtl.c
++++ b/runner/src/common_rtl.c
+@@ -256,7 +256,7 @@ void rtl_apu_restore_pacing(uint64_t frame_start_master, uint8_t frame_time_vali
+  * guest time and must not become permanent A/V latency. The short ramp joins
+  * the last delivered sample to the first current sample without a hard edge. */
+ #define RTL_AUDIO_RECOVERY_RAMP 128u
+-#define RTL_AUDIO_TARGET_NATIVES 2136u /* 4 native blocks, ~67 ms cushion */
++#define RTL_AUDIO_TARGET_NATIVES 4272u /* 8 native blocks, ~133 ms cushion: Windows devices pull in large, jittery chunks */
+ static bool g_audio_fast_forward;
+ static uint32_t g_audio_recovery_frames;
+ static uint32_t g_audio_recovery_remaining;
+@@ -1555,7 +1555,7 @@ uint16 ReadRegWord(uint16 reg) {
+   // up — between them the SPC could write only the LO byte (port 0)
+   // before host has read HI (port 1), so host sees a torn value. Read
+   // both ports atomically (single guest-time sync) for the APU-port range.
+-  if (reg >= 0x2140 && reg <= 0x217F) {
++  if (reg >= 0x2140 && reg < 0x217F) {
+     void RtlApuLock(void); void RtlApuUnlock(void);
+     extern Snes *g_snes;
+     RtlApuLock();
+@@ -1608,7 +1608,7 @@ void WriteRegWord(uint16 reg, uint16 value) {
+   // the moment it sees $2140 change. If we write lo first the IPL
+   // latches stale $2141. Order hi-then-lo so $2141 is in place
+   // before $2140 fires the trigger.
+-  if (reg >= 0x2140 && reg <= 0x217F) {
++  if (reg >= 0x2140 && reg < 0x217F) {
+     WriteReg(reg + 1, value >> 8);
+     WriteReg(reg, (uint8)value);
+     return;
+diff --git a/runner/src/cpu_state.c b/runner/src/cpu_state.c
+index 6b3cd4a..d6e9289 100644
+--- a/runner/src/cpu_state.c
++++ b/runner/src/cpu_state.c
+@@ -389,6 +389,8 @@ void cpu_dbg_funcname(const char *name) {
+     }
+ #endif
+ }
++/* Debug hook: every CPU write to a hardware register (decomp fuzz compares them). */
++void (*g_hw_write_hook)(uint16 addr, uint8 v);
+ #if BUILD_CPU_HW_LOG || SNESRECOMP_CPU_HW_DIAGNOSTICS
+ static void cpu_hw_log(uint16 addr, int is_read, uint16 val) {
+     s_last_hw_addr = addr;
+@@ -421,7 +423,15 @@ static uint16 cpu_latch_read16(CpuState *cpu, uint16 value) {
+     return value;
+ }
+ 
++/* Optional per-game ROM read hooks (e.g. a translation pack); NULL = off. */
++int (*g_rom_read8_hook)(uint8 bank, uint16 addr, uint8 *out);
++void (*g_rom_read16_hook)(uint8 bank, uint16 addr);
++
+ uint8 cpu_read8(CpuState *cpu, uint8 bank, uint16 addr) {
++    if (g_rom_read8_hook && bank >= 0xC0) {
++        uint8 v;
++        if (g_rom_read8_hook(bank, addr, &v)) return cpu_latch_read8(cpu, v);
++    }
+     if (g_snes && g_snes->cart)
+         cart_note_cpu_bus(g_snes->cart, bank, addr);
+     int off = cpu_wram_offset(bank, addr);
+@@ -456,6 +466,17 @@ uint8 cpu_read8(CpuState *cpu, uint8 bank, uint16 addr) {
+ }
+ 
+ uint16 cpu_read16(CpuState *cpu, uint8 bank, uint16 addr) {
++    if (g_rom_read16_hook && bank >= 0xC0) g_rom_read16_hook(bank, addr);
++    /* 65816 word data accesses increment the full 24-bit address: the high
++     * byte of $7E:FFFF is $7F:0000 and of $FF:FFFF is $00:0000 (absolute,
++     * long and (dp),Y forms; for bank-0 dp/stack, $01:0000 aliases $00:0000).
++     * CT C0:6804 `STA [$D0]` with $D0 = $FFFFFF writes the high byte to
++     * WRAM $0000. */
++    if (addr == 0xFFFFu) {
++        uint8 lo = cpu_read8(cpu, bank, 0xFFFFu);
++        uint8 hi = cpu_read8(cpu, (uint8)(bank + 1u), 0x0000u);
++        return (uint16)lo | ((uint16)hi << 8);
++    }
+     if (g_snes && g_snes->cart)
+         cart_note_cpu_bus(g_snes->cart, bank, addr);
+     int off = cpu_wram_offset(bank, addr);
+@@ -478,7 +499,7 @@ uint16 cpu_read16(CpuState *cpu, uint8 bank, uint16 addr) {
+         uint8 hi;
+         cpu_pace_cycles_word(addr);
+         cpu_hw_log(addr, 1, 0);
+-        if (addr >= 0x2140 && addr <= 0x217F)
++        if (addr >= 0x2140 && addr < 0x217F)
+             return cpu_latch_read16(cpu, ReadRegWord(addr));
+         lo = ReadRegOpenBus(addr, cpu->open_bus);
+         cpu->open_bus = lo;
+@@ -602,7 +623,7 @@ void cpu_write8(CpuState *cpu, uint8 bank, uint16 addr, uint8 v) {
+ #endif
+         return;
+     }
+-    if (is_hw_reg(bank, addr)) { cpu_pace_cycles(addr); cpu_hw_log(addr, 0, v); WriteReg(addr, v); return; }
++    if (is_hw_reg(bank, addr)) { cpu_pace_cycles(addr); cpu_hw_log(addr, 0, v); if (g_hw_write_hook) g_hw_write_hook(addr, v); WriteReg(addr, v); return; }
+     if (g_snes && g_snes->cart && g_snes->cart->type == CART_SUPERFX) {
+         cart_write(g_snes->cart, bank, addr, v); return;
+     }
+@@ -624,6 +645,11 @@ void cpu_write8(CpuState *cpu, uint8 bank, uint16 addr, uint8 v) {
+ }
+ 
+ void cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v) {
++    if (addr == 0xFFFFu) {  /* 24-bit increment, see cpu_read16 */
++        cpu_write8(cpu, bank, 0xFFFFu, (uint8)(v & 0xFF));
++        cpu_write8(cpu, (uint8)(bank + 1u), 0x0000u, (uint8)(v >> 8));
++        return;
++    }
+     if (g_snes && g_snes->cart)
+         cart_note_cpu_bus(g_snes->cart, bank, addr);
+     cpu->open_bus = (uint8)v;
+@@ -690,6 +716,7 @@ void cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v) {
+     if (is_hw_reg(bank, addr)) {
+         cpu_pace_cycles_word(addr);
+         cpu_hw_log(addr, 0, v);
++        if (g_hw_write_hook) { g_hw_write_hook(addr, (uint8)v); g_hw_write_hook((uint16)(addr + 1), (uint8)(v >> 8)); }
+         WriteRegWord(addr, v);
+         cpu->open_bus = (uint8)(v >> 8);
+         return;
+@@ -1015,6 +1042,13 @@ static int _ram_guard_blocks(CpuState *cpu, uint32 pc24) {
+     pc24 &= 0xFFFFFFu;
+     uint8 bank = (uint8)((pc24 >> 16) & 0xFF);
+     if (bank != 0x7E && bank != 0x7F) return 0;   /* ROM target: never guarded */
++    { /* SNESRECOMP_RAMGUARD_RANGE=lo-hi (hex pc24): only routines in range run
++       * native; for bisecting a miscompiled RAM routine. */
++        static int init; static unsigned long lo = 0, hi = 0xFFFFFF;
++        if (!init) { const char *e = getenv("SNESRECOMP_RAMGUARD_RANGE"); init = 1;
++                     if (e) sscanf(e, "%lx-%lx", &lo, &hi); }
++        if (pc24 < lo || pc24 > hi) return 1;
++    }
+     const RamRoutineGuard *g = _ram_guard_find(pc24);
+     if (g == NULL) {
+         uint64 c = _ram_guard_note(pc24);
+@@ -1073,11 +1107,26 @@ static RecompReturn (*_cpu_dispatch_lookup(CpuState *cpu, uint32 pc24))(CpuState
+     return NULL;
+ }
+ 
++
++/* UWNH debug: SNESRECOMP_TRAP_BADPC=1 logs control transfers to non-code. */
++static inline void uwnh_trap_badpc(const char *who, uint32_t pc24, uint32_t src) {
++    static int on = -1;
++    if (on < 0) on = getenv("SNESRECOMP_TRAP_BADPC") != NULL;
++    if (!on) return;
++    uint8_t b = (uint8_t)(pc24 >> 16); uint16_t a = (uint16_t)pc24;
++    int bad = ((b < 0x40 || (b >= 0x80 && b < 0xC0)) && a >= 0x2000 && a < 0x8000);
++    if (bad) fprintf(stderr, "[badpc] %s target=%06X src=%06X\n", who, pc24, src);
++}
+ RecompReturn cpu_dispatch_pc_from(CpuState *cpu, uint32 pc24,
+                                   uint16 entry_s_for_miss_restore,
+                                   uint32 source_pc24) {
+     pc24 &= 0xFFFFFFu;
+     source_pc24 &= 0xFFFFFFu;
++    uwnh_trap_badpc("dispatch", pc24, source_pc24);
++    { RecompReturn _kr;
++      if (interp_tier_koei_fptr_call(cpu, pc24, source_pc24,
++                                     (uint16)(entry_s_for_miss_restore - 3u), &_kr) > 0)
++          return _kr; }
+     unsigned mx_idx = (unsigned)(((cpu->m_flag & 1) << 1) | (cpu->x_flag & 1));
+     int via_mirror = 0;
+     int known_entry = 0;
+diff --git a/runner/src/cpu_state.h b/runner/src/cpu_state.h
+index b393675..dc22a0e 100644
+--- a/runner/src/cpu_state.h
++++ b/runner/src/cpu_state.h
+@@ -373,6 +373,14 @@ static inline void cpu_p_to_mirrors(CpuState *cpu) {
+     cpu->_flag_D = (cpu->P & CPU_P_D) ? 1 : 0;
+     cpu->_flag_V = (cpu->P & CPU_P_V) ? 1 : 0;
+     cpu->_flag_N = (cpu->P & CPU_P_N) ? 1 : 0;
++    /* Setting X (SEP #$10, PLP, RTI) clears the high bytes of X and Y on the
++     * 65816; a later REP #$10 sees zeros there, not the old 16-bit values.
++     * Chrono Trigger's C2:834D runs 16-bit indexes between PHP and PLP and
++     * its callers go back to 16-bit expecting X/Y < $100. */
++    if (cpu->x_flag) {
++        cpu->X &= 0xFF;
++        cpu->Y &= 0xFF;
++    }
+ }
+ 
+ static inline void cpu_mirrors_to_p(CpuState *cpu) {
+@@ -694,6 +702,15 @@ RecompReturn interp_tier_dispatch_tail(CpuState *cpu, uint32 target_pc24,
+ RecompReturn interp_tier_dispatch_popped_return(
+     CpuState *cpu, uint32 target_pc24, uint32 site_pc24,
+     uint16 miss_restore_s);
++/* Koei function-pointer call: the compiled code pushes bank + (NOP addr) and
++ * then target-1, and RTLs into the target; the target's RTL lands on NOP+1,
++ * the rest of the SAME function. When the popped RTL at site_pc24 matches that
++ * idiom, interpret target + continuation until the enclosing function
++ * (entered at fn_entry_s) returns, and report NORMAL. Returns -1 (and does
++ * nothing) when the site is not the idiom. */
++int interp_tier_koei_fptr_call(CpuState *cpu, uint32 target_pc24,
++                               uint32 site_pc24, uint16 fn_entry_s,
++                               RecompReturn *out);
+ RecompReturn interp_tier_dispatch_rewritten_return(CpuState *cpu,
+                                                     uint32 target_pc24,
+                                                     uint32 site_pc24);
+@@ -751,6 +768,8 @@ RecompReturn interp_tier_dispatch_bank_miss(CpuState *cpu, uint32 addr_pc24,
+ #define RECOMP_RETURN_LLE_UNWIND_BASE 0x40000000
+ int interp_bridge_in_lle_scheduler(void);
+ int interp_bridge_lle_master_deadline_reached(const CpuState *cpu);
++int interp_bridge_lle_master_deadline_reached_at(const CpuState *cpu, uint32_t pc24);
++uint32_t interp_bridge_deadline_poll_pc(void);
+ RecompReturn interp_bridge_lle_yield_unwind(CpuState *cpu, uint32 resume_pc24);
+ uint32 interp_bridge_lle_resume_pc(void);
+ void interp_bridge_set_lle_bounce_exclusions(const uint32 *targets,
+diff --git a/runner/src/cpu_trace.h b/runner/src/cpu_trace.h
+index 086e8be..62cbbb9 100644
+--- a/runner/src/cpu_trace.h
++++ b/runner/src/cpu_trace.h
+@@ -1314,7 +1314,9 @@ void cpu_trace_dump_wram(const char *tag, int scan_n);
+ #else  /* SNESRECOMP_TRACE = 0 */
+ 
+ static inline void cpu_trace_block(CpuState *cpu, uint32_t pc24)            { (void)cpu; (void)pc24; }
+-static inline void cpu_trace_func_entry(CpuState *cpu, uint32_t pc24, const char *name) { (void)cpu; (void)pc24; (void)name; }
++/* Game-provided entry hook (profiling); NULL when unused. */
++extern void (*g_func_entry_hook)(uint32_t pc24);
++static inline void cpu_trace_func_entry(CpuState *cpu, uint32_t pc24, const char *name) { (void)cpu; (void)name; if (g_func_entry_hook) g_func_entry_hook(pc24); }
+ static inline void cpu_trace_event(CpuState *cpu, uint32_t pc24, uint8_t et,
+                                    uint8_t e0, uint16_t e1)                 { (void)cpu; (void)pc24; (void)et; (void)e0; (void)e1; }
+ static inline void cpu_trace_db_change(CpuState *cpu, uint32_t pc24, uint8_t o,
+diff --git a/runner/src/desktop/glsl_shader.c b/runner/src/desktop/glsl_shader.c
+index 54f2464..964abfc 100644
+--- a/runner/src/desktop/glsl_shader.c
++++ b/runner/src/desktop/glsl_shader.c
+@@ -303,10 +303,11 @@ static void GlslShader_GetUniforms(GlslShader *gs) {
+       if (p->unif.Prev[j].Texture >= 0)
+         gs->max_prev_frame = j + 1;
+     }
+-    for (int j = 0; j < gs->n_pass; j++) {
++    for (int j = 0; j < gs->n_pass; j++)
+       GlslTextureUniform_Read(program, "Pass", j, &p->unif.Pass[j]);
++    /* PassPrev1..PassPrev<pass index>: the last one is the original. */
++    for (int j = 0; j <= gs->n_pass && j < kGlslMaxPasses; j++)
+       GlslTextureUniform_Read(program, "PassPrev", j, &p->unif.PassPrev[j]);
+-    }
+     GlslTexture *t = gs->first_texture;
+     for (int j = 0; t != NULL; t = t->next, j++)
+       p->unif.Texture[j] = glGetUniformLocation(program, t->id);
+@@ -547,8 +548,9 @@ static void GlslShader_SetShaderVars(GlslShader *gs, RenderCtx *ctx, int pass) {
+   // PassX uniforms
+   for (int i = 1; i < pass; i++)
+     RenderCtx_SetGlslTextureUniform(ctx, &p->unif.Pass[i], gs->pass[i].width, gs->pass[i].height, gs->pass[i].gl_texture);
+-  // PassPrevX uniforms
+-  for (int i = 1; i < pass; i++)
++  // PassPrevX uniforms. PassPrev<pass> is the original input (pass[0]),
++  // which ScaleFX's last pass samples as PassPrev5Texture.
++  for (int i = 0; i < pass; i++)
+     RenderCtx_SetGlslTextureUniform(ctx, &p->unif.PassPrev[pass - i], gs->pass[i].width, gs->pass[i].height, gs->pass[i].gl_texture);
+   // #parameter uniforms
+   for (GlslParam *pa = gs->first_param; pa != NULL; pa = pa->next)
+diff --git a/runner/src/desktop/host_main.c b/runner/src/desktop/host_main.c
+index 833767f..6418171 100644
+--- a/runner/src/desktop/host_main.c
++++ b/runner/src/desktop/host_main.c
+@@ -561,6 +561,8 @@ typedef struct {
+   int cond_timeout;   // frames
+   int cond_waited;
+   char *dump_tag;     // dump <tag>
++  uint32 until_btn;   // holduntil: buttons held while the condition is false
++  int slot;           // loadstate/savestate slot (any number)
+ } ScriptEntry;
+ 
+ /* Entry kinds carried in the high bits of ScriptEntry.mask. The zero-frame
+@@ -575,7 +577,8 @@ enum {
+   kScriptUntil     = 0x08000000u,
+   kScriptDump      = 0x04000000u,
+   kScriptQuit      = 0x02000000u,
+-  kScriptZeroFrame = kScriptUntil | kScriptDump | kScriptQuit,
++  kScriptSaveState = 0x01000000u,
++  kScriptZeroFrame = kScriptUntil | kScriptDump | kScriptQuit | kScriptSaveState,
+ };
+ static int g_script_quit;        // quit reached: the main loop exits
+ static int g_script_failed;      // an until timed out: exit code 3
+@@ -734,9 +737,18 @@ static void LoadScript(const char *path) {
+       sscanf(line, "%*s %d", &slot);
+       ScriptEntry *e = NewScriptEntry(&cap);
+       e->mask = kScriptLoadState | (slot & 0xF);
++      e->slot = slot;
+       e->hold_frames = 1;
+       e->wait_frames = pending_wait;
+       pending_wait = 0;
++    } else if (strcmp(cmd, "savestate") == 0) {
++      int slot = 0;
++      sscanf(line, "%*s %d", &slot);
++      ScriptEntry *e = NewScriptEntry(&cap);
++      e->mask = kScriptSaveState | (slot & 0xF);
++      e->slot = slot;
++      e->wait_frames = pending_wait;
++      pending_wait = 0;
+     } else if (strcmp(cmd, "reset") == 0) {
+       ScriptEntry *e = NewScriptEntry(&cap);
+       e->mask = kScriptReset;
+@@ -783,11 +795,21 @@ static void LoadScript(const char *path) {
+       e->poke_bytes = bytes;
+       e->poke_count = byte_count;
+       pending_wait = 0;
+-    } else if (strcmp(cmd, "until") == 0 || strcmp(cmd, "until16") == 0) {
++    } else if (strcmp(cmd, "until") == 0 || strcmp(cmd, "until16") == 0 ||
++               strcmp(cmd, "holduntil") == 0) {
++      /* holduntil <btn[+btn]> <addr> <op> <hex> [timeout]: like until, but
++       * holds the buttons on every frame the condition is still false. */
+       unsigned addr = 0, value = 0;
+       char op[8] = {0};
+       int timeout = 36000;
+-      int matched = sscanf(line, "%*s %x %7s %x %d", &addr, op, &value, &timeout);
++      uint32 hold_btn = 0;
++      const char *rest = line;
++      if (strcmp(cmd, "holduntil") == 0) {
++        hold_btn = ParseButtonMask(arg1);
++        while (*rest == ' ' || *rest == '\t') rest++;
++        while (*rest && *rest != ' ' && *rest != '\t') rest++;
++      }
++      int matched = sscanf(rest, "%*s %x %7s %x %d", &addr, op, &value, &timeout);
+       int width = strcmp(cmd, "until16") == 0 ? 2 : 1;
+       if (matched < 3 || addr + (unsigned)width > 0x20000u ||
+           (strcmp(op, "==") != 0 && strcmp(op, "!=") != 0)) {
+@@ -801,6 +823,7 @@ static void LoadScript(const char *path) {
+       e->cond_ne = op[0] == '!';
+       e->cond_value = (uint16)value;
+       e->cond_timeout = timeout;
++      e->until_btn = hold_btn;
+       e->wait_frames = pending_wait;
+       pending_wait = 0;
+     } else if (strcmp(cmd, "dump") == 0) {
+@@ -877,12 +900,15 @@ static uint32 TickScript(void) {
+           g_script_failed = 1;
+           g_script_quit = 1;
+         }
+-        return 0;
++        return e->until_btn;
+       }
+       fprintf(stderr, "script f=%u until %05X ok after %d frames\n", frame,
+               e->poke_addr, e->cond_waited);
+     } else if (e->mask & kScriptDump) {
+       ScriptDump(e->dump_tag, frame);
++    } else if (e->mask & kScriptSaveState) {
++      RtlSaveLoad(kSaveLoad_Save, e->slot);
++      fprintf(stderr, "script f=%u savestate %d\n", frame, e->slot);
+     } else {
+       fprintf(stderr, "script f=%u quit\n", frame);
+       g_script_quit = 1;
+@@ -900,7 +926,7 @@ static uint32 TickScript(void) {
+     if (g_script_counter > 0) {
+       g_script_counter--;
+       if (e->mask & kScriptLoadState) {
+-        RtlSaveLoad(kSaveLoad_Load, e->mask & 0xF);
++        RtlSaveLoad(kSaveLoad_Load, e->slot);
+         GameReset();
+         return 0;
+       }
+@@ -1145,7 +1171,8 @@ static void WritePpm(const char *path, const uint8 *pixel_buffer, int pitch,
+ static void DrawPpuFrameWithPerf(void) {
+   double profile_start = ProfileStart();
+   PreparePpuFrame();
+-  const int render_scale = 1;
++  int render_scale = g_game->present_scale ? g_game->present_scale() : 1;
++  if (render_scale < 1 || render_scale > 4) render_scale = 1;
+   uint8 *present_buffer = 0;
+   int present_pitch = 0;
+ 
+@@ -1226,19 +1253,29 @@ static void DrawPpuFrameWithPerf(void) {
+    * is not executing. That is what locked Super Metroid up when the
+    * save-state browser was opened. */
+   {
+-    const int rows = g_snes_height * render_scale;
+-    const int row_bytes = g_snes_width * render_scale * 4;
++    /* A scaled present is kept at the native size (every render_scale-th
++     * pixel): the overlays draw the backdrop at twice the frozen size. */
++    const int rows = g_snes_height;
++    const int cols = g_snes_width;
++    const int row_bytes = cols * 4;
+     if (rows > 0 && row_bytes > 0 &&
+         (size_t)rows * (size_t)row_bytes <= sizeof(g_frozen_frame)) {
+-      for (int y = 0; y < rows; y++)
+-        memcpy(g_frozen_frame + (size_t)y * (size_t)row_bytes,
+-               pixel_buffer + (size_t)y * (size_t)pitch, (size_t)row_bytes);
+-      g_frozen_w = g_snes_width * render_scale;
++      for (int y = 0; y < rows; y++) {
++        const uint8_t *src = pixel_buffer + (size_t)y * render_scale * (size_t)pitch;
++        uint8_t *dst = g_frozen_frame + (size_t)y * (size_t)row_bytes;
++        if (render_scale == 1) {
++          memcpy(dst, src, (size_t)row_bytes);
++        } else {
++          for (int x = 0; x < cols; x++)
++            memcpy(dst + 4 * x, src + 4 * (size_t)x * render_scale, 4);
++        }
++      }
++      g_frozen_w = cols;
+       g_frozen_h = rows;
+     }
+   }
+   ComposeOsd(pixel_buffer, pitch, g_snes_width * render_scale,
+-             g_snes_height * render_scale, 2);
++             g_snes_height * render_scale, render_scale >= 2 ? 1 : 2);
+   /* SNESRECOMP_SCREENSHOT=<path.ppm> [SNESRECOMP_SCREENSHOT_FRAME=<n>]: write
+    * the frame presented at simulated frame n (default: the first) as a PPM,
+    * OSD included: it is what the player sees, not the bare field.
+@@ -1898,8 +1935,8 @@ static _Thread_local bool g_audio_consumer_stalled;
+ static _Thread_local uint64_t g_audio_stalled_callback;
+ static uint64_t g_audio_callback_count;  /* protected by g_audio_mutex */
+ static bool g_audio_primed;  /* protected by g_audio_mutex */
+-#define HOST_AUDIO_PREFILL 2136u
+-#define HOST_AUDIO_HIGH_WATER 4096u
++#define HOST_AUDIO_PREFILL 4272u
++#define HOST_AUDIO_HIGH_WATER 6400u
+ #if SNESRECOMP_SDL3
+ /* SDL3 replaced the pull callback with an SDL_AudioStream the app pushes into,
+  * so the mixer needs a scratch buffer sized to whatever the stream asks for. */
+@@ -3594,6 +3631,9 @@ error_reading:;
+     /* Pacing. A title that decouples presentation (presentation_hz hook)
+      * gets re-presented between simulated frames from the captured field;
+      * everyone else presents once per simulated frame. */
++    { static int env_turbo = -1;  /* headless test runs: SNESRECOMP_TURBO=1 */
++      if (env_turbo < 0) env_turbo = getenv("SNESRECOMP_TURBO") != NULL;
++      if (env_turbo) g_turbo = true; }
+     bool paced_realtime = !g_turbo && !g_config.disable_frame_delay;
+     bool paced_custom = PresentationDecoupled() && paced_realtime;
+     double video_now = MonotonicSeconds();
+diff --git a/runner/src/desktop/host_main.h b/runner/src/desktop/host_main.h
+index 38b218c..68c8940 100644
+--- a/runner/src/desktop/host_main.h
++++ b/runner/src/desktop/host_main.h
+@@ -185,6 +185,11 @@ typedef struct SnesDesktopHostGame {
+    * restarts the game through a temporary save state, so the player resumes
+    * exactly where they left off. Zero keeps today's behaviour exactly. */
+   int in_game_launcher;
++  /* Integer presentation scale for this frame (1..4). Above 1 the host asks
++   * the presenter for frame_w*scale x frame_h*scale pixels and draw_frame
++   * must fill all of them (an HD overlay drawn over the upscaled field).
++   * The frozen backdrop keeps the native size. NULL: always 1. */
++  int (*present_scale)(void);
+ } SnesDesktopHostGame;
+ 
+ /* The whole program. Returns the process exit code. */
+diff --git a/runner/src/snes/dma.c b/runner/src/snes/dma.c
+index 9fb6639..1d2001a 100644
+--- a/runner/src/snes/dma.c
++++ b/runner/src/snes/dma.c
+@@ -164,6 +164,7 @@ uint8_t dma_read(Dma* dma, uint16_t adr) {
+ }
+ 
+ void dma_write(Dma* dma, uint16_t adr, uint8_t val) {
++  if (dma->snes) dma_line0Touch(dma, dma->snes->vPos);
+ #if defined(SNESRECOMP_TRACE) && SNESRECOMP_TRACE
+   if (dma_debug_enabled())
+     fprintf(stderr, "[dma] write $43%02x=%02x (ch=%d)\n", adr & 0xff, val,
+@@ -625,3 +626,25 @@ void dma_startDma(Dma* dma, uint8_t val, bool hdma) {
+     }
+   }
+ }
++
++/* Line-0 channel registers, for frame-model hosts. HDMA latches each
++ * channel's table address at line 0; a game that later reuses an HDMA
++ * channel for a general DMA (Chrono Trigger's line-211 IRQ uploads VRAM on
++ * channel 7, the window-wipe channel) only changes the registers the CPU
++ * sees, not the transfer already running. A host that renders after the
++ * frame's CPU work snapshots the registers at the first mid-frame DMA
++ * register write and renders from that copy. */
++static DmaChannel s_l0_chan[8];
++static int s_l0_armed, s_l0_valid;
++void dma_line0Arm(void) { s_l0_armed = 1; s_l0_valid = 0; }
++void dma_line0Touch(Dma* dma, uint16_t vpos) {
++  if (s_l0_armed && !s_l0_valid && vpos >= 1 && vpos <= 224) {
++    memcpy(s_l0_chan, dma->channel, sizeof s_l0_chan);
++    s_l0_valid = 1;
++  }
++}
++int dma_line0Get(DmaChannel out[8]) {
++  if (!s_l0_valid) return 0;
++  memcpy(out, s_l0_chan, sizeof s_l0_chan);
++  return 1;
++}
+diff --git a/runner/src/snes/dma.h b/runner/src/snes/dma.h
+index f55baf8..72b9e60 100644
+--- a/runner/src/snes/dma.h
++++ b/runner/src/snes/dma.h
+@@ -94,6 +94,9 @@ void dma_primeHdmaFirstLine(Dma* dma);
+ uint64_t dma_hdmaMasterEstimate(Dma* dma); /* per-frame CPU-stall estimate */
+ bool dma_cycle(Dma* dma);
+ void dma_startDma(Dma* dma, uint8_t val, bool hdma);
++void dma_line0Arm(void);
++void dma_line0Touch(Dma* dma, uint16_t vpos);
++int dma_line0Get(DmaChannel out[8]);
+ /* True when an A-bus DMA source cannot be cartridge data on this mapping --
+  * a $80+ bank below $8000 on LoROM. Judged where the channel is ARMED, from
+  * the address the game programmed: a legal transfer wraps within its bank and
+diff --git a/runner/src/snes/dsp.c b/runner/src/snes/dsp.c
+index 17304fd..1905f82 100644
+--- a/runner/src/snes/dsp.c
++++ b/runner/src/snes/dsp.c
+@@ -282,25 +282,6 @@ static void dsp_handleEcho(Dsp* dsp, int* outputL, int* outputR) {
+ }
+ 
+ static void dsp_cycleChannel(Dsp* dsp, int ch) {
+-  // handle pitch counter
+-  uint16_t pitch = dsp->channel[ch].pitch;
+-  if(ch > 0 && dsp->channel[ch].pitchModulation) {
+-    int factor = (dsp->channel[ch - 1].sampleOut >> 4) + 0x400;
+-    pitch = (pitch * factor) >> 10;
+-    if(pitch > 0x3fff) pitch = 0x3fff;
+-  }
+-  int newCounter = dsp->channel[ch].pitchCounter + pitch;
+-  if(newCounter > 0xffff) {
+-    // next sample
+-    dsp_decodeBrr(dsp, ch);
+-  }
+-  dsp->channel[ch].pitchCounter = newCounter;
+-  int16_t sample = 0;
+-  if(dsp->channel[ch].useNoise) {
+-    sample = dsp->noiseSample;
+-  } else {
+-    sample = dsp_getSample(dsp, ch, dsp->channel[ch].pitchCounter >> 12, (dsp->channel[ch].pitchCounter >> 4) & 0xff);
+-  }
+   // Key-on/off is LATCHED and polled every other sample, KOF taking
+   // priority — hardware behavior (and what the snes9x oracle does).
+   // The inherited port code (`MY_CHANGES`) instead applied KON/KOF
+@@ -310,26 +291,59 @@ static void dsp_cycleChannel(Dsp* dsp, int ch) {
+   // this latched path. A pending keyOn survives while keyOff is held
+   // (engine clears $5C later -> voice starts at the next poll), exactly
+   // as on hardware.
++  //
++  // The poll runs BEFORE the voice renders its sample. It used to run
++  // after: the key-on tick then rendered the PREVIOUS note's decode buffer
++  // at the stale pitch position, and a fast attack (AR=15 adds 1024 in the
++  // same tick) scaled it into an isolated one-sample spike ahead of every
++  // new note — an audible click/crackle throughout the music. Hardware
++  // also restarts the interpolation position and the envelope counter on
++  // key-on, so a note never starts mid-block of stale data.
++  bool keyedOn = false;
+   if(dsp->evenCycle) {
+-    // handle keyon/off (every other cycle)
+     if(dsp->channel[ch].keyOff) {
+       // go to release
+       dsp->channel[ch].adsrState = 4;
+     } else if(dsp->channel[ch].keyOn) {
+       dsp->channel[ch].keyOn = false;
++      keyedOn = true;
+       // restart current sample
+       dsp->channel[ch].previousFlags = 0;
+       uint16_t samplePointer = dsp->dirPage + 4 * dsp->channel[ch].srcn;
+       dsp->channel[ch].decodeOffset = dsp->apu_ram[samplePointer];
+       dsp->channel[ch].decodeOffset |= dsp->apu_ram[(samplePointer + 1) & 0xffff] << 8;
+       memset(dsp->channel[ch].decodeBuffer, 0, sizeof(dsp->channel[ch].decodeBuffer));
++      dsp->channel[ch].pitchCounter = 0;
++      dsp->channel[ch].rateCounter = 0;
+       dsp->channel[ch].gain = 0;
+       // Key-on always enters the ATTACK stage; whether the envelope VALUE
+       // follows ADSR or the GAIN program is decided live per tick (the
+       // stage machine is source-independent — see dsp_handleGain).
+       dsp->channel[ch].adsrState = 0;
++      // Decode the note's first block now so position 0 interpolates from
++      // silence into the new sample rather than from the old note.
++      dsp_decodeBrr(dsp, ch);
+     }
+   }
++  // handle pitch counter
++  uint16_t pitch = dsp->channel[ch].pitch;
++  if(ch > 0 && dsp->channel[ch].pitchModulation) {
++    int factor = (dsp->channel[ch - 1].sampleOut >> 4) + 0x400;
++    pitch = (pitch * factor) >> 10;
++    if(pitch > 0x3fff) pitch = 0x3fff;
++  }
++  int newCounter = keyedOn ? 0 : dsp->channel[ch].pitchCounter + pitch;
++  if(newCounter > 0xffff) {
++    // next sample
++    dsp_decodeBrr(dsp, ch);
++  }
++  dsp->channel[ch].pitchCounter = newCounter;
++  int16_t sample = 0;
++  if(dsp->channel[ch].useNoise) {
++    sample = dsp->noiseSample;
++  } else {
++    sample = dsp_getSample(dsp, ch, dsp->channel[ch].pitchCounter >> 12, (dsp->channel[ch].pitchCounter >> 4) & 0xff);
++  }
+   // handle reset
+   if(dsp->reset) {
+     dsp->channel[ch].adsrState = 4;
+diff --git a/runner/src/snes/interp_bridge.c b/runner/src/snes/interp_bridge.c
+index 3752ead..da23465 100644
+--- a/runner/src/snes/interp_bridge.c
++++ b/runner/src/snes/interp_bridge.c
+@@ -699,6 +699,82 @@ void interp_bridge_set_master_deadline(uint64_t master_clock) {
+     s_lle_master_deadline = master_clock;
+ }
+ 
++/* Fiber frame model (host-owned). When set and returning nonzero, the host
++ * suspended the running guest at a native block's deadline poll and resumed
++ * it on a later frame; the block continues instead of yield-unwinding. */
++int (*interp_bridge_deadline_fiber_hook)(void);
++
++/* Per-fiber bridge nesting context. A host that suspends the guest mid-call
++ * and runs interrupt handlers on another stack must present those handlers
++ * the nesting state of an idle bridge, then put the suspended chain's state
++ * back before resuming it. */
++typedef struct {
++    int      sched_depth, bounce_owner_depth, bridge_depth;
++    int      owner_exit_valid, owner_is_scheduler, bounce_recomp_base;
++    int      apu_driving;
++    uint16_t owner_exit_s;
++    uint32_t sched_yield_pc;
++    uint16_t sched_yield_flag_addr;
++    uint8_t  sched_yield_flag_value;
++    uint64_t master_deadline;
++    const char *last_recomp_func;
++    uint32_t resume_pc24;
++    int      wai_yield, quiescent_yield;
++} InterpBridgeFiberCtx;
++size_t interp_bridge_fiber_ctx_size(void) { return sizeof(InterpBridgeFiberCtx); }
++void interp_bridge_fiber_ctx_save(void *out) {
++    extern const char *g_last_recomp_func;
++    InterpBridgeFiberCtx *c = (InterpBridgeFiberCtx *)out;
++    c->sched_depth = s_lle_sched_depth;
++    c->bounce_owner_depth = s_interp_bounce_owner_depth;
++    c->bridge_depth = s_interp_bridge_depth;
++    c->owner_exit_valid = s_interp_owner_exit_valid;
++    c->owner_is_scheduler = s_interp_owner_is_scheduler;
++    c->bounce_recomp_base = s_interp_bounce_recomp_base;
++    c->apu_driving = g_interp_apu_driving;
++    c->owner_exit_s = s_interp_owner_exit_s;
++    c->sched_yield_pc = s_sched_yield_pc;
++    c->sched_yield_flag_addr = s_sched_yield_flag_addr;
++    c->sched_yield_flag_value = s_sched_yield_flag_value;
++    c->master_deadline = s_lle_master_deadline;
++    c->last_recomp_func = g_last_recomp_func;
++    c->resume_pc24 = s_lle_resume_pc24;
++    c->wai_yield = s_lle_wai_yield;
++    c->quiescent_yield = s_lle_quiescent_yield;
++}
++void interp_bridge_fiber_ctx_load(const void *in) {
++    extern const char *g_last_recomp_func;
++    const InterpBridgeFiberCtx *c = (const InterpBridgeFiberCtx *)in;
++    s_lle_sched_depth = c->sched_depth;
++    s_interp_bounce_owner_depth = c->bounce_owner_depth;
++    s_interp_bridge_depth = c->bridge_depth;
++    s_interp_owner_exit_valid = c->owner_exit_valid;
++    s_interp_owner_is_scheduler = c->owner_is_scheduler;
++    s_interp_bounce_recomp_base = c->bounce_recomp_base;
++    g_interp_apu_driving = c->apu_driving;
++    s_interp_owner_exit_s = c->owner_exit_s;
++    s_sched_yield_pc = c->sched_yield_pc;
++    s_sched_yield_flag_addr = c->sched_yield_flag_addr;
++    s_sched_yield_flag_value = c->sched_yield_flag_value;
++    s_lle_master_deadline = c->master_deadline;
++    g_last_recomp_func = c->last_recomp_func;
++    s_lle_resume_pc24 = c->resume_pc24;
++    s_lle_wai_yield = c->wai_yield;
++    s_lle_quiescent_yield = c->quiescent_yield;
++}
++
++/* The guest PC a generated deadline poll would resume at if it unwound. A
++ * fiber host that parks the chain at the poll reads it to describe the
++ * parked guest as an ordinary resume point (save states). */
++static uint32_t s_deadline_poll_pc;
++uint32_t interp_bridge_deadline_poll_pc(void) { return s_deadline_poll_pc; }
++int interp_bridge_lle_master_deadline_reached_at(const CpuState *cpu, uint32_t pc24) {
++    s_deadline_poll_pc = pc24;
++    const int r = interp_bridge_lle_master_deadline_reached(cpu);
++    s_deadline_poll_pc = 0;   /* a poll without a PC must not see this one */
++    return r;
++}
++
+ int interp_bridge_lle_master_deadline_reached(const CpuState *cpu) {
+     /* SNESRECOMP_DEADLINE_DIAG=1: report why the bound is not firing.
+      *
+@@ -726,6 +802,13 @@ int interp_bridge_lle_master_deadline_reached(const CpuState *cpu) {
+         cpu && s_lle_sched_depth > 0 && s_interp_bounce_owner_depth > 0 &&
+         s_lle_master_deadline != 0 &&
+         cpu->master_cycles >= s_lle_master_deadline;
++    if (reached && interp_bridge_deadline_fiber_hook &&
++        interp_bridge_deadline_fiber_hook()) {
++        /* The host suspended this whole C call chain (a fiber frame model)
++         * and resumed it on a later frame with a fresh deadline: carry on in
++         * native code instead of unwinding to the interpreter. */
++        return 0;
++    }
+     if (reached) {
+         s_lle_next_unwind_is_deadline = 1;
+         static int fired = -1;
+@@ -746,7 +829,17 @@ int interp_bridge_lle_master_deadline_reached(const CpuState *cpu) {
+     return reached;
+ }
+ 
++/* UWNH debug: SNESRECOMP_TRAP_BADPC=1 logs control transfers to non-code. */
++static inline void uwnh_trap_badpc(const char *who, uint32_t pc24, uint32_t src) {
++    static int on = -1;
++    if (on < 0) on = getenv("SNESRECOMP_TRAP_BADPC") != NULL;
++    if (!on) return;
++    uint8_t b = (uint8_t)(pc24 >> 16); uint16_t a = (uint16_t)pc24;
++    int bad = ((b < 0x40 || (b >= 0x80 && b < 0xC0)) && a >= 0x2000 && a < 0x8000);
++    if (bad) fprintf(stderr, "[badpc] %s target=%06X src=%06X\n", who, pc24, src);
++}
+ RecompReturn interp_bridge_lle_yield_unwind(CpuState *cpu, uint32 resume_pc24) {
++    uwnh_trap_badpc("yield", resume_pc24, 0);
+     /* DIAGNOSTIC (SNESRECOMP_TRAP_YIELD=<lo>-<hi> hex pc24 range): print every
+      * LLE yield unwind whose resume PC falls in the range, with the live guest
+      * S and the function that yielded. A yield mid-body returns the unwind
+@@ -1146,6 +1239,62 @@ static void interp_hist_init(void) {
+ }
+ #endif
+ 
++int uwnh_ring_dump_request;
++static uint32_t *uwnh_llehist;
++static void uwnh_llehist_dump(void) {
++    const char *path = getenv("SNESRECOMP_LLEHIST");
++    FILE *f = path ? fopen(path, "w") : NULL;
++    if (!f || !uwnh_llehist) return;
++    for (uint32_t pc = 0; pc < (1u << 24); pc++)
++        if (uwnh_llehist[pc]) fprintf(f, "%06X %u\n", (unsigned)pc, uwnh_llehist[pc]);
++    fclose(f);
++}
++
++/* SNESRECOMP_EXITSTAT=<file>: record, for every JSL the interpreter executes
++ * and sees return by RTL at the same stack depth, the (entry m,x) -> (exit m,x)
++ * pair per target. Written at exit as "PC24 MeXe->MxXx count". Observability
++ * for declaring exit widths of interpreter-only (force_lle) callees. */
++typedef struct { uint32_t tgt; uint16_t sp; uint8_t emx; } ExitStatFrame;
++static ExitStatFrame s_es_stack[512];
++static int s_es_top;
++static uint32_t s_es_key[8192]; static uint32_t s_es_cnt[8192];
++static const char *s_es_path; static int s_es_init;
++static void exitstat_dump(void) {
++    FILE *f = fopen(s_es_path, "w"); if (!f) return;
++    for (int i = 0; i < 8192; i++) if (s_es_cnt[i])
++        fprintf(f, "%06X M%dX%d->M%dX%d %u\n", (unsigned)(s_es_key[i] >> 8),
++                (s_es_key[i] >> 3) & 1, (s_es_key[i] >> 2) & 1,
++                (s_es_key[i] >> 1) & 1, s_es_key[i] & 1, (unsigned)s_es_cnt[i]);
++    fclose(f);
++}
++static int exitstat_enabled(void) {
++    if (!s_es_init) { s_es_init = 1; s_es_path = getenv("SNESRECOMP_EXITSTAT");
++                      if (s_es_path) atexit(exitstat_dump); }
++    return s_es_path != NULL;
++}
++static void exitstat_step(uint8_t op, const Interp816 *in) {
++    if (op == 0x22) {
++        if (s_es_top < 512) {
++            s_es_stack[s_es_top].tgt = ((uint32_t)in->k << 16) | in->pc;
++            s_es_stack[s_es_top].sp = in->sp;
++            s_es_stack[s_es_top].emx = (uint8_t)(((in->mf ? 1 : 0) << 1) | (in->xf ? 1 : 0));
++            s_es_top++;
++        }
++    } else if (op == 0x6B) {
++        while (s_es_top > 0 && (uint16_t)(s_es_stack[s_es_top - 1].sp + 3) < in->sp) s_es_top--;
++        if (s_es_top > 0 && (uint16_t)(s_es_stack[s_es_top - 1].sp + 3) == in->sp) {
++            const ExitStatFrame *fr = &s_es_stack[--s_es_top];
++            const uint32_t key = (fr->tgt << 8) | ((uint32_t)fr->emx << 2) |
++                                 ((in->mf ? 1u : 0u) << 1) | (in->xf ? 1u : 0u);
++            uint32_t h = (key * 2654435761u) >> 19;
++            for (int n = 0; n < 8192; n++, h = (h + 1) & 8191) {
++                if (!s_es_cnt[h]) { s_es_key[h] = key; s_es_cnt[h] = 1; break; }
++                if (s_es_key[h] == key) { s_es_cnt[h]++; break; }
++            }
++        }
++    }
++}
++
+ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
+                                  uint16_t s_exit, uint32_t *out_landing,
+                                  uint32_t *out_return_pc,
+@@ -1277,6 +1426,33 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
+         /* SNESRECOMP_INTERP_PCTRACE=N: print the PC every N steps. For the case
+          * the bail-time trace cannot reach -- a run that never bails and never
+          * returns, where the question is simply "where is it". */
++        { /* UWNH debug: SNESRECOMP_LLEHIST=path writes per-PC interpreted step
++           * counts at exit, to find what still runs in the interpreter. */
++          static int on = -1; static uint32_t *hist;
++          if (on < 0) { on = getenv("SNESRECOMP_LLEHIST") != NULL;
++                        if (on) { hist = calloc(1u << 24, sizeof *hist); atexit(uwnh_llehist_dump); uwnh_llehist = hist; } }
++          if (on && hist) hist[pc_before & 0xFFFFFFu]++;
++        }
++        { /* UWNH debug: SNESRECOMP_TRAP_BADPC ring of recent interpreted PCs,
++           * dumped once when execution reaches non-code. */
++          static int on = -1; static uint32_t ring[65536]; static uint16_t sring[65536];
++          static unsigned ri; static int fired;
++          if (on < 0) on = getenv("SNESRECOMP_TRAP_BADPC") != NULL;
++          if (on && uwnh_ring_dump_request) {
++              uwnh_ring_dump_request = 0;
++              for (unsigned k = ri > 60000 ? ri - 60000 : 0; k < ri; k++)
++                fprintf(stderr, "[ring] %06X S=%04X\n", (unsigned)ring[k & 65535], sring[k & 65535]);
++          }
++          if (on) {
++            ring[ri & 65535] = (uint32_t)pc_before; sring[ri & 65535] = cpu->S; ri++;
++            uint8_t b = (uint8_t)(pc_before >> 16); uint16_t a = (uint16_t)pc_before;
++            if (!fired && (((b < 0x40 || (b >= 0x80 && b < 0xC0)) && a >= 0x2000 && a < 0x8000) || bridge_bus_read(cpu, pc_before) == 0x00)) {
++              fired = 1;
++              for (unsigned k = ri > 65536 ? ri - 65536 : 0; k < ri; k++)
++                fprintf(stderr, "[badpc-ring] %06X S=%04X\n", (unsigned)ring[k & 65535], sring[k & 65535]);
++            }
++          }
++        }
+         { static long pct = -1;
+           if (pct < 0) { const char *e = getenv("SNESRECOMP_INTERP_PCTRACE");
+                          pct = e ? atol(e) : 0; if (pct < 0) pct = 0;
+@@ -1323,6 +1499,24 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
+             bridge_apu_flush(cpu);
+             return 1;
+         }
++        /* A nested run (an LLE call made from compiled code) cannot return to
++         * a scheduler at the frame deadline, so a hardware/NMI wait inside it
++         * used to spin into the step cap and bail with the callee half done.
++         * When the host runs the guest on a fiber, park here exactly like a
++         * compiled block's deadline poll does, and carry on after the host
++         * has delivered the frame's interrupts. */
++        if (!auto_quiescent && !stop_on_rti && interp_bridge_deadline_fiber_hook &&
++            s_lle_master_deadline && cpu->master_cycles >= s_lle_master_deadline) {
++            sync_interp_to_cpu(&in, cpu);
++            bridge_apu_flush(cpu);
++            s_deadline_poll_pc = pc_before;
++            const int parked = interp_bridge_deadline_fiber_hook();
++            s_deadline_poll_pc = 0;
++            if (parked) {
++                sync_cpu_to_interp(cpu, &in);
++                steps = 0;
++            }
++        }
+         /* Star Ocean battle $00D9 work-wait specialization. This does not skip
+          * the wait; it executes the LDA $00D9 / BEQ loop with the same master
+          * timing and IRQ/deadline sampling, but avoids the full interpreter bus
+@@ -2097,6 +2291,7 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
+             g_interp_bridge_pc_hook(pc_before & 0xFFFFFFu,
+                                     in.mf ? 1 : 0, in.xf ? 1 : 0);
+         int _cyc = interp816_runOpcode(&in);   /* executes the opcode; pushes/pops frames */
++        if (exitstat_enabled()) exitstat_step(op, &in);
+         if (s_interp_pctrace && steps < 4)
+             fprintf(stderr, "[pctrace] step=%ld post-runOpcode cyc=%d pc=%02X:%04X\n",
+                     steps, _cyc, in.k, in.pc);
+@@ -2593,6 +2788,7 @@ static const char *interp_scope_name(uint32_t pc24) {
+ /* Wrapper: mark the interp tier as APU-driving for the whole run (nesting-safe
+  * save/restore) so rtl_accumulate_apu_catchup skips the per-touch synthetic
+  * estimate — the core advances the SPC per opcode instead. */
++
+ static int interp_bridge_run_ex2(CpuState *cpu, uint32_t entry_pc24,
+                                  uint16_t s_exit, uint32_t *out_landing,
+                                  uint32_t *out_return_pc,
+@@ -3122,12 +3318,58 @@ RecompReturn interp_tier_dispatch_balanced(CpuState *cpu, uint32_t target_pc24,
+     return cpu_unresolved_abandon_balanced(cpu, site_pc24, entry_s, hrv);
+ }
+ 
++
++int interp_tier_koei_fptr_call(CpuState *cpu, uint32 target_pc24,
++                               uint32 site_pc24, uint16 fn_entry_s,
++                               RecompReturn *out) {
++    site_pc24 &= 0xFFFFFFu;
++    const uint8 sb = (uint8)(site_pc24 >> 16);
++    const uint16 sa = (uint16)site_pc24;
++    const uint32 nop24 = (site_pc24 & 0xFF0000u) | (uint16)(sa + 1);
++    if (cpu_read8(cpu, sb, sa) != 0x6B ||
++        cpu_read8(cpu, sb, (uint16)(sa + 1)) != 0xEA)
++        return -1;
++    const uint16 s = cpu->S;
++    const uint32 frame = (uint32)cpu_read8(cpu, 0, (uint16)(s + 1)) |
++                         ((uint32)cpu_read8(cpu, 0, (uint16)(s + 2)) << 8) |
++                         ((uint32)cpu_read8(cpu, 0, (uint16)(s + 3)) << 16);
++    if (frame != nop24)
++        return -1;
++    /* The frame is below the enclosing function's own entry S: run the
++     * callee and the function's continuation until its RTL leaves fn_entry_s. */
++    if ((uint16)(fn_entry_s - s) >= 0x8000u)
++        return -1;
++    target_pc24 &= 0xFFFFFFu;
++    interp_tier_note(target_pc24);
++    uint32_t landing = target_pc24;
++    int ok = interp_bridge_run_ex2(cpu, target_pc24, fn_entry_s, &landing,
++                                   NULL, 0, 0, 0, 0, NULL, 0, 0);
++    if (s_lle_unwind_active) {
++        *out = (RecompReturn)RECOMP_RETURN_LLE_UNWIND_BASE;
++        return 1;
++    }
++    RecompReturn propagated;
++    if (interp_run_propagated_return(ok, &propagated)) {
++        *out = propagated;
++        return 1;
++    }
++    if (!ok)
++        cpu->S = (uint16)(fn_entry_s + 3u);
++    *out = RECOMP_RETURN_NORMAL;
++    return 1;
++}
++
+ RecompReturn interp_tier_dispatch_popped_return(CpuState *cpu,
+                                                 uint32_t target_pc24,
+                                                 uint32_t site_pc24,
+                                                 uint16_t miss_restore_s) {
+     target_pc24 &= 0xFFFFFFu;
+     site_pc24 &= 0xFFFFFFu;
++    uwnh_trap_badpc("popped_return", target_pc24, site_pc24);
++    { RecompReturn _kr;
++      if (interp_tier_koei_fptr_call(cpu, target_pc24, site_pc24,
++                                     (uint16)(miss_restore_s - 3u), &_kr) > 0)
++          return _kr; }
+     interp_tier_note(target_pc24);
+     const uint8_t mx = tier2_entry_mx(cpu);
+     tier2_discover(site_pc24, target_pc24, mx, TIER2_KIND_DISPATCH, -1);
+@@ -3158,6 +3400,7 @@ RecompReturn interp_tier_dispatch_rewritten_return(CpuState *cpu,
+                                                     uint32_t site_pc24) {
+     target_pc24 &= 0xFFFFFFu;
+     site_pc24 &= 0xFFFFFFu;
++    uwnh_trap_badpc("rewritten_return", target_pc24, site_pc24);
+ 
+     /* A paired AOT body bounced from an LLE interpreter frame has no compiled
+      * guest caller to skip.  If that body deliberately rewrites and pops its
+diff --git a/runner/src/snes/interp_bridge.h b/runner/src/snes/interp_bridge.h
+index 0d83011..4f702f9 100644
+--- a/runner/src/snes/interp_bridge.h
++++ b/runner/src/snes/interp_bridge.h
+@@ -130,6 +130,8 @@ void interp_bridge_reset_dynamic_cache(void);
+  * architecturally interruptible instructions use this at their legal byte
+  * boundaries before unwinding to the owning interpreter. */
+ int interp_bridge_lle_master_deadline_reached(const CpuState *cpu);
++int interp_bridge_lle_master_deadline_reached_at(const CpuState *cpu, uint32_t pc24);
++uint32_t interp_bridge_deadline_poll_pc(void);
+ 
+ /* Execute an architectural interrupt handler through its terminal RTI. The
+  * caller has already materialized the hardware interrupt frame. */
+diff --git a/runner/src/snes/ppu.c b/runner/src/snes/ppu.c
+index 0269cbd..9e8b6af 100644
+--- a/runner/src/snes/ppu.c
++++ b/runner/src/snes/ppu.c
+@@ -2766,6 +2766,9 @@ static bool PpuWidescreenOamLeftHintAllows(Ppu *ppu, uint8_t index, int x,
+   return ppu->wsOamMotionGraceOn && ppu->wsOamMotionGrace[slot] != 0;
+ }
+ 
++uint32_t *g_ppu_hd_prov;
++uint32_t g_ppu_obj_prov[kPpuBufWidth];
++
+ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
+   static const uint8 spriteSizes[8][2] = {
+     {8, 16}, {8, 32}, {8, 64}, {16, 32},
+@@ -2916,6 +2919,10 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
+               }
+         // Lower OAM indices are processed later and overwrite higher ones.
+                 dst[0] = z + pixel;
++                if (g_ppu_hd_prov)
++                  g_ppu_obj_prov[dst - ppu->objBuffer.data] = PPU_HD_PROV(
++                      objAdr + usedTile * 16, oam1 & 0x4000 ? 7 - px : px,
++                      row & 7, 2, paletteBase);
+             }
+         }
+         if(tilesFound > 34 &&
+@@ -2953,6 +2960,8 @@ uint8_t ppu_read(Ppu* ppu, uint8_t adr) {
+       ppu->hCountSecond = false;
+       ppu->vCountSecond = false;
+       ppu->countersLatched = true;
++      { static int dbg = -1; if (dbg < 0) dbg = getenv("SNESRECOMP_CT_SLHV") != NULL;
++        if (dbg) { fprintf(stderr, "[slhv] f=%u v=%u h=%u\n", (unsigned)snes_frame_counter, ppu->vCount, ppu->hCount); } }
+       return 0;
+     }
+     case 0x38: {
+@@ -3164,6 +3173,10 @@ void ppu_rasterRecord(uint16_t reg, uint16_t line, uint8_t val) {
+  * HDMA stream onto TM), and a restore after line 1's HDMA write would stomp
+  * it. Measured as exactly that regression: the intro's top black bar
+  * disappeared while the HDMA bars below survived. */
++/* HDMAEN in effect at line 0: the value at ppu_rasterBegin, updated by any
++ * write the beam placed outside lines 1-224. */
++uint8_t ppu_rasterBaseHdmaen(void) { return s_raster0.hdmaen; }
++
+ int ppu_rasterTakeHdmaen(uint8_t *out) {
+   if (!s_raster_hdmaen_pending) return 0;
+   s_raster_hdmaen_pending = 0;
+diff --git a/runner/src/snes/ppu.h b/runner/src/snes/ppu.h
+index c9df036..03f9a0c 100644
+--- a/runner/src/snes/ppu.h
++++ b/runner/src/snes/ppu.h
+@@ -72,6 +72,17 @@ typedef struct PpuWsElasticSeg {
+ 
+ typedef uint16_t PpuZbufType;
+ 
++/* HD-pack provenance (legacy per-pixel renderer). When g_ppu_hd_prov points
++ * at a 256x240 array, each main-screen pixel records the tile it came from:
++ * bit 31 valid, 0-14 tile VRAM word address, 15-17 data column, 18-20 data
++ * row (flips already applied), 21-22 depth (1=2bpp 2=4bpp 3=8bpp),
++ * 23-30 CGRAM palette base. 0 = backdrop / mode 7 / unknown. */
++extern uint32_t *g_ppu_hd_prov;
++#define PPU_HD_PROV(adr, dx, dy, bppc, pal) \
++  (0x80000000u | ((uint32_t)(adr) & 0x7fff) | ((uint32_t)(dx) & 7) << 15 | \
++   ((uint32_t)(dy) & 7) << 18 | ((uint32_t)(bppc) & 3) << 21 | \
++   ((uint32_t)(pal) & 0xff) << 23)
++
+ typedef struct PpuPixelPrioBufs {
+   // This holds the prio in the upper 8 bits and the color in the lower 8 bits.
+   // Sized for the widescreen border; logical screen x maps to
+@@ -562,6 +573,7 @@ void ppu_set_vram_write_log_hook(PpuVramWriteLogHook hook);
+ void ppu_rasterBegin(Ppu *ppu);
+ void ppu_rasterRenderBegin(Ppu *ppu);
+ int  ppu_rasterTakeHdmaen(uint8_t *out);
++uint8_t ppu_rasterBaseHdmaen(void);
+ void ppu_rasterRecord(uint16_t reg, uint16_t line, uint8_t val);
+ void ppu_rasterApplyLine(Ppu *ppu, int line);
+ 
+diff --git a/runner/src/snes/ppu_legacy.c b/runner/src/snes/ppu_legacy.c
+index f4b38bd..8d3764d 100644
+--- a/runner/src/snes/ppu_legacy.c
++++ b/runner/src/snes/ppu_legacy.c
+@@ -7,6 +7,8 @@
+ #include "snes_regs.h"
+ 
+ static void ppu_render_pixel(Ppu *ppu, int x, int y);
++extern uint32_t g_ppu_obj_prov[];
++static uint32_t s_bg_prov, s_resolve_prov;
+ static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
+                              int *r, int *g, int *b);
+ static uint16_t ppu_read_offset(Ppu *ppu, int col, int row);
+@@ -80,8 +82,12 @@ static void ppu_render_pixel(Ppu *ppu, int x, int y) {
+   int r = 0, r2 = 0;
+   int g = 0, g2 = 0;
+   int b = 0, b2 = 0;
++  if (g_ppu_hd_prov && x >= 0 && x < 256 && y >= 1 && y <= 240)
++    g_ppu_hd_prov[(y - 1) * 256 + x] = 0;
+   if (!PPU_forcedBlank(ppu)) {
+     int mainLayer = ppu_resolve_pixel(ppu, x, y, false, &r, &g, &b);
++    if (g_ppu_hd_prov && x >= 0 && x < 256 && y >= 1 && y <= 240)
++      g_ppu_hd_prov[(y - 1) * 256 + x] = s_resolve_prov;
+     bool colorWindowState = ppu_window_contains(ppu, 5, x);
+     if (
+       PPU_clipMode(ppu) == 3 ||
+@@ -192,9 +198,13 @@ static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
+     }
+     if (pixel > 0) {
+       layer = curLayer;
++      if (g_ppu_hd_prov)
++        s_resolve_prov = curLayer < 4 ? (PPU_mode(ppu) == 7 ? 0 : s_bg_prov)
++                                      : g_ppu_obj_prov[x + kPpuExtraLeftRight];
+       break;
+     }
+   }
++  if (layer == 5) s_resolve_prov = 0;
+   if (PPU_directColor(ppu) && layer < 4 &&
+       bit_depths_per_mode[actMode][layer] == 8) {
+     *r = ((pixel & 0x7) << 2) | ((pixel & 0x100) >> 7);
+@@ -339,6 +349,10 @@ static int ppu_sample_bg(Ppu *ppu, int x, int y, int layer, bool priority) {
+     pixel |= ((plane4 >> col) & 1) << 6;
+     pixel |= ((plane4 >> (8 + col)) & 1) << 7;
+   }
++  if (pixel && g_ppu_hd_prov)
++    s_bg_prov = PPU_HD_PROV(PPU_bgTileAdr(ppu, layer) + (tileNum & 0x3ff) * 4 * bitDepth,
++                            7 - col, row, bitDepth == 2 ? 1 : bitDepth == 4 ? 2 : 3,
++                            bitDepth == 8 ? 0 : paletteSize * paletteNum);
+   // return cgram index, or 0 if transparent, palette number in bits 10-8 for 8-color layers
+   return pixel == 0 ? 0 : paletteSize * paletteNum + pixel;
+ }
+diff --git a/runner/src/snes/snes.c b/runner/src/snes/snes.c
+index e64d6ca..8989cc3 100644
+--- a/runner/src/snes/snes.c
++++ b/runner/src/snes/snes.c
+@@ -452,7 +452,7 @@ static uint32_t snes_advance_beam(Snes *snes, uint32_t clocks, bool check_irq) {
+         snes->dbgLatchedThisField = 1;
+         h += upto;
+         consumed += upto;
+-        if (h >= 1364u) { h = 0; v++; if (v >= 262u) v = 0; }
++        if (h >= 1364u) { h = 0; v++; if (v >= 262u) { v = 0; snes->inNmi = false; } }
+         snes->hPos = (uint16_t)h;
+         snes->vPos = (uint16_t)v;
+         snes->inVblank = v >= 225u;
+@@ -484,6 +484,8 @@ static uint32_t snes_advance_beam(Snes *snes, uint32_t clocks, bool check_irq) {
+       v++;
+       if (v >= 262u) {
+         v = 0;
++        /* Vblank ends: hardware drops an unread RDNMI latch here. */
++        if (check_irq) snes->inNmi = false;
+         if (check_irq && !snes->hdmaBeamOff)
+           dma_initHdma(snes->dma);
+         /* End of field. Armed the whole way round and nothing latched means
+@@ -605,11 +607,17 @@ void snes_sync_master_clock(Snes *snes, uint64_t master_clock) {
+   }
+ }
+ 
++/* Counts $4210 reads so a frame-model host can tell whether its NMI handler
++ * acknowledged RDNMI; if not, the latch stays set for the main loop to poll
++ * (Chrono Trigger's field loader at $C0:3B71 waits on it with NMI enabled). */
++unsigned g_rdnmi_reads;
++
+ uint8_t snes_readReg(Snes* snes, uint16_t adr) {
+   switch(adr) {
+     case 0x4210: {
+       uint8_t val = 0x2; // CPU version (4 bit)
+       val |= snes->inNmi << 7;
++      g_rdnmi_reads++;
+       // Real hardware clears the NMI-pending latch on read. Without this
+       // a stale `inNmi=true` would persist across NMI handler exit and
+       // produce a spurious second-read=true if anything re-reads $4210
+@@ -806,6 +814,7 @@ void snes_writeReg(Snes* snes, uint16_t adr, uint8_t val) {
+       break;
+     }
+     case 0x420b: {
++      if (val) dma_line0Touch(snes->dma, snes->vPos);
+       /* Log DMA triggers */
+       { static int dma420b_log = 0;
+         if (snes_reg_trace_enabled() && val != 0 && dma420b_log < 30) {

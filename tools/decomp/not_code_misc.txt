@@ -1,0 +1,12 @@
+# Entries in banks without their own not_code file that are not code: each is the target of a JSL that only junk decodes
+# (data, or a mid-instruction fragment of another entry); no decompiled, kept or profiled routine reaches it (2026-10-20).
+0A80A5  JSL at C1:0E6A inside C10E65, itself a mid-instruction entry (not_code_c1); bank 0A mirror of CA
+35AB5E  JSL at FD:5255 followed by RTI, in FD data no real code reaches; bank 35 mirror of F5
+37A002  JSL at CF:B421 / CF:BDA1, in CF0000-CFE2FF data; bank 37 mirror of F7
+39F739  JSR (abs,X) table read at CF:2E41, in CF0000-CFE2FF data; bank 39 mirror of F9
+6B2269  JSL at CF:A439, in CF0000-CFE2FF data; bank 6B mirror of EB
+7755AA  JSL at CF:3B09, in CF0000-CFE2FF data; bank 77 mirror of F7
+B3F48D  JSL at C1:8530 (C18528/C18529), bytes no real C1 code reaches; bank B3 mirror of F3
+CB23DC  JSL at CF:3D59, in CF0000-CFE2FF data
+CB2BD4  JSL at CF:3C73, in CF0000-CFE2FF data
+D7220D  JSL at CF:A3A5, in CF0000-CFE2FF data
